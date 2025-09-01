@@ -9,8 +9,8 @@
 *.test
 
 # Output of the go build
-timemachine
 /timemachine
+timemachine.exe
 
 # Go workspace file
 go.work
