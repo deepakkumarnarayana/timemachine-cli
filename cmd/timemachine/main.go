@@ -28,6 +28,7 @@ func init() {
 	
 	// Add commands
 	rootCmd.AddCommand(commands.InitCmd())
+	rootCmd.AddCommand(commands.StartCmd())
 	rootCmd.AddCommand(commands.ListCmd())
 	rootCmd.AddCommand(commands.ShowCmd())
 	rootCmd.AddCommand(commands.RestoreCmd())
