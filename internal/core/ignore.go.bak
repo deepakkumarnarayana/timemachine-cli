@@ -1,0 +1,459 @@
+package core
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+)
+
+// IgnorePattern represents a single ignore rule with its metadata
+type IgnorePattern struct {
+	Original        string         // Original pattern from .gitignore or built-in
+	Pattern         string         // Processed pattern for matching
+	IsNegation      bool           // Pattern starts with !
+	IsDirectoryOnly bool           // Pattern ends with /
+	IsAbsolute      bool           // Pattern starts with /
+	CompiledRegex   *regexp.Regexp // Pre-compiled regex for complex patterns
+	IsSimple        bool           // True if pattern can use fast string matching
+}
+
+// IgnoreManager handles all ignore pattern logic with performance optimization
+type IgnoreManager struct {
+	patterns     []IgnorePattern
+	projectRoot  string
+	cache        map[string]bool // Path cache for repeated lookups
+	cacheMutex   sync.RWMutex    // Thread-safe cache access
+	gitignoreAge map[string]int64 // Track .gitignore modification times
+}
+
+// NewIgnoreManager creates a new ignore manager with built-in patterns
+func NewIgnoreManager(projectRoot string) *IgnoreManager {
+	im := &IgnoreManager{
+		projectRoot:  projectRoot,
+		cache:        make(map[string]bool),
+		gitignoreAge: make(map[string]int64),
+	}
+
+	// Add built-in ignore patterns (backward compatibility)
+	im.addBuiltinPatterns()
+
+	// Load .gitignore files
+	im.loadGitignoreFiles()
+
+	return im
+}
+
+// addBuiltinPatterns adds the current hard-coded patterns for backward compatibility
+func (im *IgnoreManager) addBuiltinPatterns() {
+	// Directory patterns from current watcher.go (without trailing slash - we'll handle that in addPattern)
+	directoryPatterns := []string{
+		".git", "node_modules", "dist", "build", "__pycache__",
+		".next", ".nuxt", "target", "bin", "obj",
+		".vscode", ".idea", "coverage", ".nyc_output", ".cache",
+	}
+
+	// File patterns from current watcher.go
+	filePatterns := []string{
+		"*.swp", "*.swo", "*.swn", // Vim swap files
+		"*~",                      // Backup files
+		"*.tmp", "*.temp",         // Temporary files
+		".DS_Store",              // macOS
+		"Thumbs.db",              // Windows
+		// Note: Removed *.log as it's too broad - let .gitignore handle specific log patterns
+	}
+
+	// Add directory patterns - these should match directories AND files within them
+	for _, pattern := range directoryPatterns {
+		// Add directory pattern
+		im.addPattern(pattern+"/", false)
+		// Also add pattern to catch files within these directories
+		im.addPattern(pattern+"/**", false)
+	}
+
+	// Add file patterns  
+	for _, pattern := range filePatterns {
+		im.addPattern(pattern, false)
+	}
+
+	// Add special TimeMachine pattern
+	im.addPattern("**/timemachine_snapshots/**", false)
+}
+
+// loadGitignoreFiles recursively loads .gitignore files from project root
+func (im *IgnoreManager) loadGitignoreFiles() {
+	filepath.Walk(im.projectRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		if info.Name() == ".gitignore" {
+			im.loadGitignoreFile(path)
+		}
+		return nil
+	})
+}
+
+// loadGitignoreFile loads patterns from a single .gitignore file
+func (im *IgnoreManager) loadGitignoreFile(gitignorePath string) {
+	file, err := os.Open(gitignorePath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	// Track modification time for cache invalidation
+	if info, err := file.Stat(); err == nil {
+		im.gitignoreAge[gitignorePath] = info.ModTime().Unix()
+	}
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Handle negation patterns before path adjustment
+		isNegation := false
+		if strings.HasPrefix(line, "!") {
+			isNegation = true
+			line = line[1:]
+		}
+
+		// Convert .gitignore path to be relative to project root
+		gitignoreDir := filepath.Dir(gitignorePath)
+		relDir, err := filepath.Rel(im.projectRoot, gitignoreDir)
+		if err != nil {
+			continue
+		}
+
+		// Adjust pattern for .gitignore location
+		adjustedPattern := line
+		if relDir != "." {
+			if strings.HasPrefix(line, "/") {
+				// Absolute pattern relative to .gitignore location
+				adjustedPattern = relDir + line
+			} else {
+				// Relative pattern - prepend directory path
+				adjustedPattern = relDir + "/" + line
+			}
+		}
+
+		// Re-add negation prefix if needed
+		if isNegation {
+			adjustedPattern = "!" + adjustedPattern
+		}
+
+		im.addPattern(adjustedPattern, true)
+	}
+}
+
+// addPattern adds a single pattern to the ignore manager
+func (im *IgnoreManager) addPattern(pattern string, fromGitignore bool) {
+	if pattern == "" {
+		return
+	}
+
+	ignorePattern := IgnorePattern{
+		Original: pattern,
+	}
+
+	// Handle negation patterns
+	if strings.HasPrefix(pattern, "!") {
+		ignorePattern.IsNegation = true
+		pattern = pattern[1:]
+	}
+
+	// Handle directory-only patterns
+	if strings.HasSuffix(pattern, "/") {
+		ignorePattern.IsDirectoryOnly = true
+		pattern = strings.TrimSuffix(pattern, "/")
+		
+		// For directory patterns, also add a pattern to match files within
+		if fromGitignore {
+			// Add recursive pattern for files within this directory
+			filePattern := IgnorePattern{
+				Original:    pattern + "/**",
+				Pattern:     pattern + "/**",
+				IsNegation:  ignorePattern.IsNegation,
+				IsAbsolute:  ignorePattern.IsAbsolute,
+			}
+			if regex, err := im.globToRegex(filePattern.Pattern); err == nil {
+				filePattern.CompiledRegex = regex
+			}
+			im.patterns = append(im.patterns, filePattern)
+		}
+	}
+
+	// Handle absolute patterns (starting with /)
+	if strings.HasPrefix(pattern, "/") {
+		ignorePattern.IsAbsolute = true
+		pattern = pattern[1:]
+	}
+
+	ignorePattern.Pattern = pattern
+
+	// Determine if we can use simple string matching or need regex
+	if im.isSimplePattern(pattern) {
+		ignorePattern.IsSimple = true
+	} else {
+		// Convert glob pattern to regex
+		if regex, err := im.globToRegex(pattern); err == nil {
+			ignorePattern.CompiledRegex = regex
+		}
+	}
+
+	im.patterns = append(im.patterns, ignorePattern)
+}
+
+// isSimplePattern checks if pattern can use fast string matching
+func (im *IgnoreManager) isSimplePattern(pattern string) bool {
+	// Simple if it contains no glob characters
+	return !strings.ContainsAny(pattern, "*?[]")
+}
+
+// globToRegex converts a glob pattern to a compiled regular expression
+func (im *IgnoreManager) globToRegex(glob string) (*regexp.Regexp, error) {
+	// Start with the original pattern
+	regex := ""
+	i := 0
+	
+	for i < len(glob) {
+		switch glob[i] {
+		case '*':
+			if i+1 < len(glob) && glob[i+1] == '*' {
+				// ** matches any path including subdirectories
+				regex += ".*"
+				i += 2
+				// Skip optional slash after **
+				if i < len(glob) && glob[i] == '/' {
+					i++
+				}
+			} else {
+				// * matches any characters except /
+				regex += "[^/]*"
+				i++
+			}
+		case '?':
+			regex += "[^/]"
+			i++
+		case '[':
+			// Character class - find the closing ]
+			j := i + 1
+			for j < len(glob) && glob[j] != ']' {
+				j++
+			}
+			if j < len(glob) {
+				regex += glob[i:j+1]
+				i = j + 1
+			} else {
+				regex += regexp.QuoteMeta(string(glob[i]))
+				i++
+			}
+		case '.', '^', '$', '+', '{', '}', '(', ')', '|', '\\':
+			// Escape regex special characters
+			regex += "\\" + string(glob[i])
+			i++
+		default:
+			regex += string(glob[i])
+			i++
+		}
+	}
+
+	// Anchor the regex
+	regex = "^" + regex + "$"
+
+	return regexp.Compile(regex)
+}
+
+// ShouldIgnore determines if a path should be ignored based on all patterns
+func (im *IgnoreManager) ShouldIgnore(path string) bool {
+	// Check cache first
+	im.cacheMutex.RLock()
+	if result, exists := im.cache[path]; exists {
+		im.cacheMutex.RUnlock()
+		return result
+	}
+	im.cacheMutex.RUnlock()
+
+	// Calculate result
+	result := im.calculateShouldIgnore(path)
+
+	// Cache the result
+	im.cacheMutex.Lock()
+	im.cache[path] = result
+	im.cacheMutex.Unlock()
+
+	return result
+}
+
+// calculateShouldIgnore performs the actual ignore calculation
+func (im *IgnoreManager) calculateShouldIgnore(path string) bool {
+	// Get relative path from project root
+	relPath, err := filepath.Rel(im.projectRoot, path)
+	if err != nil {
+		return false
+	}
+
+	// Normalize path separators to forward slashes (gitignore standard)
+	relPath = filepath.ToSlash(relPath)
+
+	// Check if it's a directory
+	isDir := false
+	if info, err := os.Stat(path); err == nil {
+		isDir = info.IsDir()
+	}
+
+	// Apply patterns in order (later patterns override earlier ones)
+	shouldIgnore := false
+	
+	for _, pattern := range im.patterns {
+		if im.patternMatches(pattern, relPath, isDir) {
+			shouldIgnore = !pattern.IsNegation
+		}
+	}
+
+	return shouldIgnore
+}
+
+// patternMatches checks if a pattern matches a given path
+func (im *IgnoreManager) patternMatches(pattern IgnorePattern, relPath string, isDir bool) bool {
+	// Directory-only patterns only match directories
+	if pattern.IsDirectoryOnly && !isDir {
+		return false
+	}
+
+	// For absolute patterns, match against full relative path
+	if pattern.IsAbsolute {
+		return im.matchSinglePath(pattern, relPath)
+	}
+
+	// For relative patterns, check if path or any parent directory matches
+	// This handles both direct matches and files within ignored directories
+	pathParts := strings.Split(relPath, "/")
+	for i := 0; i < len(pathParts); i++ {
+		subPath := strings.Join(pathParts[i:], "/")
+		
+		// Check direct match
+		if im.matchSinglePath(pattern, subPath) {
+			return true
+		}
+		
+		// Check if this is a file inside an ignored directory
+		if !isDir && i < len(pathParts)-1 {
+			dirPath := strings.Join(pathParts[i:len(pathParts)-1], "/")
+			if im.matchSinglePath(pattern, dirPath) {
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
+// matchSinglePath performs the actual pattern matching
+func (im *IgnoreManager) matchSinglePath(pattern IgnorePattern, path string) bool {
+	if pattern.IsSimple {
+		// Fast string matching for simple patterns
+		return path == pattern.Pattern || 
+			   strings.HasPrefix(path, pattern.Pattern+"/")
+	}
+
+	if pattern.CompiledRegex != nil {
+		// Regex matching for complex patterns
+		return pattern.CompiledRegex.MatchString(path)
+	}
+
+	// Fallback to filepath.Match for basic glob patterns
+	// Handle directory patterns specially
+	if strings.HasSuffix(pattern.Pattern, "/*") {
+		// Pattern like "logs/*" should match "logs/file.log" but not "logs/sub/file.log"
+		dirPattern := strings.TrimSuffix(pattern.Pattern, "/*")
+		pathDir := filepath.Dir(path)
+		// Normalize path separators
+		pathDir = filepath.ToSlash(pathDir)
+		dirPattern = filepath.ToSlash(dirPattern)
+		return pathDir == dirPattern
+	}
+	
+	// Handle patterns with asterisk that should only match direct children
+	if strings.Contains(pattern.Pattern, "/") && strings.Contains(pattern.Pattern, "*") && !strings.Contains(pattern.Pattern, "**") {
+		// Pattern like "logs/*.log" - should only match direct children
+		parts := strings.Split(pattern.Pattern, "/")
+		pathParts := strings.Split(path, "/")
+		
+		// Must have same number of path segments
+		if len(parts) == len(pathParts) {
+			for i, part := range parts {
+				if strings.Contains(part, "*") || strings.Contains(part, "?") {
+					// Use filepath.Match for glob patterns
+					matched, err := filepath.Match(part, pathParts[i])
+					if err != nil || !matched {
+						return false
+					}
+				} else if part != pathParts[i] {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	}
+	
+	// Standard glob matching
+	matched, err := filepath.Match(pattern.Pattern, path)
+	if err != nil {
+		// Try matching against the basename for patterns without slashes
+		if !strings.Contains(pattern.Pattern, "/") {
+			basename := filepath.Base(path)
+			matched, err = filepath.Match(pattern.Pattern, basename)
+		}
+	}
+	return err == nil && matched
+}
+
+// ShouldIgnoreDirectory is a convenience method for directory checking
+func (im *IgnoreManager) ShouldIgnoreDirectory(path string) bool {
+	return im.ShouldIgnore(path)
+}
+
+// ShouldIgnoreFile is a convenience method for file checking  
+func (im *IgnoreManager) ShouldIgnoreFile(path string) bool {
+	return im.ShouldIgnore(path)
+}
+
+// ClearCache clears the internal cache (useful for testing or .gitignore changes)
+func (im *IgnoreManager) ClearCache() {
+	im.cacheMutex.Lock()
+	defer im.cacheMutex.Unlock()
+	im.cache = make(map[string]bool)
+}
+
+// RefreshGitignoreFiles reloads all .gitignore files if they've changed
+func (im *IgnoreManager) RefreshGitignoreFiles() {
+	shouldReload := false
+
+	// Check if any .gitignore files have changed
+	filepath.Walk(im.projectRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != ".gitignore" {
+			return nil
+		}
+
+		currentAge := info.ModTime().Unix()
+		if lastAge, exists := im.gitignoreAge[path]; !exists || currentAge > lastAge {
+			shouldReload = true
+		}
+		return nil
+	})
+
+	if shouldReload {
+		// Reload patterns and clear cache
+		im.patterns = im.patterns[:0] // Clear patterns
+		im.addBuiltinPatterns()
+		im.loadGitignoreFiles()
+		im.ClearCache()
+	}
+}

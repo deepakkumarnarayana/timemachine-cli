@@ -1,0 +1,10 @@
+# TimeMachine test ignore file
+*.log
+build/
+node_modules/
+dist/
+.git/
+.fuse_hidden*
+
+dk/test.txt
+dk/testdir

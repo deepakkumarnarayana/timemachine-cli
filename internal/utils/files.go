@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // CalculateDirectorySize calculates the total size of all files in a directory
@@ -39,18 +41,23 @@ func FormatBytes(bytes int64) string {
 
 // CountProjectFiles counts files and directories in a project, excluding ignored patterns
 func CountProjectFiles(rootPath string) (fileCount, dirCount int) {
+	// Use Enhanced IgnoreManager for consistent ignore logic
+	ignoreManager := core.NewEnhancedIgnoreManager(rootPath)
+	
 	filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		
-		// Skip hidden directories and common ignore patterns
-		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" || name == "dist" || 
-			   name == "build" || name == "__pycache__" {
+		// Use IgnoreManager to check if path should be ignored
+		if ignoreManager.ShouldIgnore(path) {
+			if info.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		
+		if info.IsDir() {
 			dirCount++
 		} else {
 			fileCount++
