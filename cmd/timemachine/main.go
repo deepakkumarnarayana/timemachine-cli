@@ -5,7 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/yourusername/timemachine/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/commands"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 var rootCmd = &cobra.Command{
@@ -24,6 +25,12 @@ main Git repository.`,
 func init() {
 	// Add version flag
 	rootCmd.Flags().BoolP("version", "v", false, "Show version information")
+	
+	// Add commands
+	rootCmd.AddCommand(commands.InitCmd())
+	rootCmd.AddCommand(commands.ListCmd())
+	rootCmd.AddCommand(commands.ShowCmd())
+	rootCmd.AddCommand(commands.RestoreCmd())
 }
 
 func main() {

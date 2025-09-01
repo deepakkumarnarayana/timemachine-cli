@@ -29,3 +29,6 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+
+# Time Machine shadow repository
+.git/timemachine_snapshots/
