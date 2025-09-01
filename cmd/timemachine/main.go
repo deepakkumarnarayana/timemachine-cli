@@ -9,14 +9,21 @@ import (
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
+const Version = "1.0.0"
+
 var rootCmd = &cobra.Command{
-	Use:   "timemachine",
-	Short: "Time Machine - Automatic Git snapshots for AI-assisted development",
+	Use:     "timemachine",
+	Version: Version,
+	Short:   "Time Machine - Automatic Git snapshots for AI-assisted development",
 	Long: `Time Machine creates automatic Git snapshots in a shadow repository
 to provide instant rollback capabilities during AI-assisted coding sessions.
 It watches for file changes and creates snapshots without affecting your
 main Git repository.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if version, _ := cmd.Flags().GetBool("version"); version {
+			fmt.Printf("Time Machine CLI v%s\n", Version)
+			return
+		}
 		fmt.Println("⏰ Time Machine CLI")
 		fmt.Println("Use 'timemachine --help' for available commands")
 	},
@@ -32,6 +39,8 @@ func init() {
 	rootCmd.AddCommand(commands.ListCmd())
 	rootCmd.AddCommand(commands.ShowCmd())
 	rootCmd.AddCommand(commands.RestoreCmd())
+	rootCmd.AddCommand(commands.StatusCmd())
+	rootCmd.AddCommand(commands.CleanCmd())
 }
 
 func main() {
