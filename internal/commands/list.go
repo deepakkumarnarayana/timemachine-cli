@@ -6,6 +6,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
 )
 
 // ListCmd creates the list command
@@ -82,7 +83,7 @@ func runList(filePath string, limit int) error {
 		// Format with consistent spacing
 		fmt.Printf("%-10s  %-50s  %s\n", 
 			shortHash, 
-			truncateString(snapshot.Message, 50), 
+			utils.TruncateString(snapshot.Message, 50), 
 			snapshot.Time,
 		)
 	}
@@ -99,15 +100,4 @@ func runList(filePath string, limit int) error {
 	fmt.Println("Use 'timemachine restore <hash>' to restore a snapshot")
 
 	return nil
-}
-
-// truncateString truncates a string to the specified length with ellipsis
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }
