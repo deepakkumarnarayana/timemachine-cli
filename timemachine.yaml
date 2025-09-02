@@ -19,7 +19,7 @@ ui:
     table_format: table
 watcher:
     batch_size: 100
-    debounce_delay: 2s
+    debounce_delay: 5s
     enable_recursive: true
     ignore_patterns: []
     max_watched_files: 100000

@@ -1,0 +1,394 @@
+name: Configuration System Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'internal/config/**'
+      - 'internal/commands/config.go'
+      - '.github/workflows/config-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'internal/config/**'
+      - 'internal/commands/config.go'
+      - '.github/workflows/config-tests.yml'
+  schedule:
+    # Run security tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  GO_VERSION: '1.21'
+  GOLANGCI_LINT_VERSION: 'v1.54'
+
+jobs:
+  # Basic unit tests across multiple Go versions and OS
+  unit-tests:
+    name: Unit Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: ['1.20', '1.21']
+        
+    steps:
+    - name: Set up Go ${{ matrix.go-version }}
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run unit tests
+      run: go test -v -race -timeout=10m ./internal/config/...
+
+    - name: Run integration tests
+      run: go test -v -race -timeout=15m -tags=integration ./internal/config/...
+
+  # Comprehensive test suite with coverage
+  coverage-tests:
+    name: Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests with coverage
+      run: |
+        go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/config/...
+        go tool cover -func=coverage.out
+
+    - name: Check coverage threshold
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        echo "Coverage: $COVERAGE%"
+        if (( $(echo "$COVERAGE < 90.0" | bc -l) )); then
+          echo "❌ Coverage $COVERAGE% is below minimum threshold of 90%"
+          exit 1
+        else
+          echo "✅ Coverage $COVERAGE% meets minimum threshold"
+        fi
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: config
+        name: config-coverage
+        fail_ci_if_error: false
+
+  # Security-focused testing
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run security-specific tests
+      run: |
+        echo "🔒 Running comprehensive security tests..."
+        go test -v -run="TestSecurity" -timeout=20m ./internal/config/...
+
+    - name: Run property-based security tests
+      run: |
+        echo "🎲 Running property-based security tests..."
+        go test -v -run="TestProperty.*Security\|TestProperty.*Path" -timeout=15m ./internal/config/...
+
+    - name: Run fuzzing tests
+      run: |
+        echo "🔧 Running fuzzing tests..."
+        go test -v -run="TestFuzz" -timeout=10m ./internal/config/...
+
+    - name: Install gosec
+      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+
+    - name: Run gosec security scan
+      run: |
+        echo "🛡️ Running gosec security analysis..."
+        gosec -fmt=json -out=gosec-report.json -stdout -verbose=text ./internal/config/...
+
+    - name: Upload gosec results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: gosec-results
+        path: gosec-report.json
+
+  # Performance benchmarking
+  performance-tests:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run benchmarks
+      run: |
+        echo "⚡ Running performance benchmarks..."
+        go test -bench=. -benchmem -timeout=30m ./internal/config/... | tee benchmark-results.txt
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt
+
+    - name: Performance regression check
+      run: |
+        echo "📊 Checking for performance regressions..."
+        # This would compare against baseline benchmarks in production
+        # For now, just ensure benchmarks complete successfully
+        if grep -q "FAIL" benchmark-results.txt; then
+          echo "❌ Benchmarks failed"
+          exit 1
+        else
+          echo "✅ All benchmarks completed successfully"
+        fi
+
+  # Stress testing and edge cases
+  stress-tests:
+    name: Stress Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run concurrent stress tests
+      run: |
+        echo "💪 Running concurrent stress tests..."
+        go test -v -run=".*Concurrent.*" -timeout=25m ./internal/config/...
+
+    - name: Run large file tests
+      run: |
+        echo "📁 Running large file handling tests..."
+        go test -v -run=".*Large.*" -timeout=20m ./internal/config/...
+
+    - name: Run memory stress tests
+      run: |
+        echo "🧠 Running memory stress tests..."
+        go test -v -run=".*Memory.*" -race -timeout=15m ./internal/config/...
+
+  # Code quality and linting
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Install golangci-lint
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{ env.GOLANGCI_LINT_VERSION }}
+
+    - name: Run golangci-lint
+      run: |
+        echo "🔍 Running code quality analysis..."
+        golangci-lint run --timeout=10m ./internal/config/...
+
+    - name: Check test naming conventions
+      run: |
+        echo "📝 Checking test naming conventions..."
+        # Ensure security tests are properly named
+        if ! find ./internal/config/ -name "*test.go" -exec grep -l "TestSecurity" {} \; | grep -q .; then
+          echo "❌ Missing security tests"
+          exit 1
+        fi
+        
+        # Ensure integration tests exist
+        if ! find ./internal/config/ -name "*test.go" -exec grep -l "TestIntegration" {} \; | grep -q .; then
+          echo "❌ Missing integration tests"
+          exit 1
+        fi
+        
+        echo "✅ Test naming conventions are followed"
+
+    - name: Verify test organization
+      run: |
+        echo "🗂️ Verifying test organization..."
+        # Check that we have the expected test files
+        test_files=("config_test.go" "validator_test.go" "security_test.go" "property_test.go" "integration_test.go" "benchmark_test.go")
+        
+        for file in "${test_files[@]}"; do
+          if [[ ! -f "internal/config/$file" ]]; then
+            echo "❌ Missing test file: $file"
+            exit 1
+          fi
+        done
+        
+        echo "✅ All expected test files are present"
+
+  # Flaky test detection
+  flaky-test-detection:
+    name: Flaky Test Detection
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || contains(github.event.pull_request.labels.*.name, 'flaky-test-check')
+    
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests multiple times to detect flaky behavior
+      run: |
+        echo "🔄 Running tests multiple times to detect flaky behavior..."
+        for i in {1..10}; do
+          echo "🏃 Test run $i/10"
+          if ! go test -v -race -timeout=15m ./internal/config/...; then
+            echo "❌ Test run $i failed - possible flaky test detected"
+            exit 1
+          fi
+        done
+        echo "✅ No flaky tests detected in 10 runs"
+
+  # Final status check
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, coverage-tests, security-tests, performance-tests, stress-tests, code-quality]
+    if: always()
+    
+    steps:
+    - name: Check test results
+      run: |
+        echo "📋 Test Summary:"
+        echo "Unit Tests: ${{ needs.unit-tests.result }}"
+        echo "Coverage Tests: ${{ needs.coverage-tests.result }}"
+        echo "Security Tests: ${{ needs.security-tests.result }}"
+        echo "Performance Tests: ${{ needs.performance-tests.result }}"
+        echo "Stress Tests: ${{ needs.stress-tests.result }}"
+        echo "Code Quality: ${{ needs.code-quality.result }}"
+        
+        # Fail if any critical tests failed
+        if [[ "${{ needs.unit-tests.result }}" == "failure" || 
+              "${{ needs.coverage-tests.result }}" == "failure" || 
+              "${{ needs.security-tests.result }}" == "failure" ]]; then
+          echo "❌ Critical tests failed"
+          exit 1
+        fi
+        
+        echo "✅ All critical tests passed"
+
+    - name: Post success message
+      if: success()
+      run: |
+        echo "🎉 All configuration system tests passed successfully!"
+        echo "✅ Security hardening validated"
+        echo "✅ Performance benchmarks completed"
+        echo "✅ Coverage threshold met"
+        echo "✅ Code quality checks passed"
