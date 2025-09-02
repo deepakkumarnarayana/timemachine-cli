@@ -239,23 +239,115 @@ func (v *Validator) isValidFilePath(path string) bool {
 		return false
 	}
 	
+	originalPath := path
+	
 	// Normalize and clean the path
 	cleanPath := filepath.Clean(path)
 	
-	// Check for encoded path traversal sequences first
+	// SECURITY: Multiple layers of path traversal detection
+	
+	// 1. Check for basic path traversal patterns in original path
+	if strings.Contains(path, "..") {
+		return false
+	}
+	
+	// 2. Check for URL encoded path traversal (single encoding)
 	decodedPath, err := url.QueryUnescape(path)
 	if err == nil && strings.Contains(decodedPath, "..") {
 		return false
 	}
 	
-	// Check for Windows path traversal attempts
+	// 3. Check for double URL encoding
+	doubleDecoded, err := url.QueryUnescape(decodedPath)
+	if err == nil && strings.Contains(doubleDecoded, "..") {
+		return false
+	}
+	
+	// 4. Check for Unicode fullwidth characters (．／)
+	unicodeNormalized := strings.ReplaceAll(path, "\uff0e", ".")
+	unicodeNormalized = strings.ReplaceAll(unicodeNormalized, "\uff0f", "/")
+	if strings.Contains(unicodeNormalized, "..") {
+		return false
+	}
+	
+	// 5. Check for Unicode dots in various forms
+	unicodeDots := []string{
+		"\u002e\u002e", // Standard Unicode dots
+		"\u2024\u2024", // One dot leader
+		"\uff0e\uff0e", // Fullwidth period
+	}
+	for _, dots := range unicodeDots {
+		if strings.Contains(path, dots) {
+			return false
+		}
+	}
+	
+	// 6. Check for Windows path traversal attempts
 	if strings.Contains(strings.ToLower(path), "..\\") {
 		return false
 	}
 	
-	// Check for path traversal patterns
+	// 7. Check for overlong UTF-8 sequences (common attack)
+	// Convert bytes that could represent ".." in overlong form
+	pathBytes := []byte(path)
+	for i := 0; i < len(pathBytes)-1; i++ {
+		// Check for overlong encoding patterns
+		if pathBytes[i] == 0xc0 && pathBytes[i+1] == 0xae {
+			return false // Overlong encoding for '.'
+		}
+	}
+	
+	// 8. Check for path traversal in cleaned path (additional safety)
 	if strings.Contains(cleanPath, "..") {
 		return false
+	}
+	
+	// 9. Check for suspicious character sequences that could bypass filters
+	suspiciousPatterns := []string{
+		".../",   // Triple dots
+		"....//", // Quad dots with double slash
+		".\\./",  // Mixed separators
+		".//../", // Hidden traversal
+	}
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(path, pattern) {
+			return false
+		}
+	}
+	
+	// 10. Check for Unicode URL encoding patterns (%uXXXX)
+	if strings.Contains(path, "%u00") {
+		return false
+	}
+	
+	// 11. Check for malformed URL encoding patterns that could bypass filters
+	malformedPatterns := []string{
+		"%2", "%G", "%X", // Incomplete or invalid hex
+		"%u002e%u002e%u002f", // Unicode URL encoding for ../
+	}
+	for _, pattern := range malformedPatterns {
+		if strings.Contains(path, pattern) {
+			return false
+		}
+	}
+	
+	// 12. Validate that non-encoded paths that look like base64 don't decode to traversal
+	// This catches attempts to bypass by using base64-like strings
+	if !strings.Contains(originalPath, "/") && !strings.Contains(originalPath, "\\") {
+		// Could be an encoded attempt - reject if it's suspiciously short and uniform
+		if len(originalPath) > 6 && len(originalPath) < 50 {
+			// Check if it's entirely alphanumeric (potential base64)
+			isAlphaNumeric := true
+			for _, r := range originalPath {
+				if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+					isAlphaNumeric = false
+					break
+				}
+			}
+			if isAlphaNumeric {
+				return false
+			}
+		}
 	}
 	
 	// If it's an absolute path, validate it's in a safe location
