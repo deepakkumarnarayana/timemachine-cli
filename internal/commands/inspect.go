@@ -29,28 +29,46 @@ func validateGitHash(hash string) error {
 	return nil
 }
 
-// sanitizeFilePath prevents path traversal attacks
+// sanitizeFilePath prevents path traversal attacks using defense-in-depth security approach
 func sanitizeFilePath(path string) (string, error) {
 	if path == "" {
 		return "", nil // Empty path is allowed for no filter
 	}
 	
-	// Prevent directory traversal
+	// First line of defense: explicit path traversal detection
+	// filepath.IsLocal allows some traversal patterns that resolve within the directory
 	if strings.Contains(path, "..") {
 		return "", fmt.Errorf("path traversal not allowed")
 	}
 	
-	// Prevent absolute paths
+	// Second line of defense: Windows absolute path detection (critical for cross-platform security)
+	// filepath.IsLocal and filepath.IsAbs don't detect Windows paths on Unix systems
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
+		return "", fmt.Errorf("absolute paths not allowed")
+	}
+	
+	// Additional Windows path detection: UNC paths (\\server\share)
+	if strings.HasPrefix(path, "\\\\") || strings.HasPrefix(path, "//") {
+		return "", fmt.Errorf("UNC and network paths not allowed")
+	}
+	
+	// Third line of defense: Unix absolute path detection
 	if filepath.IsAbs(path) {
 		return "", fmt.Errorf("absolute paths not allowed")
+	}
+	
+	// Fourth line of defense: Use Go 1.20+ filepath.IsLocal for additional validation
+	// This catches edge cases we might have missed
+	if !filepath.IsLocal(path) {
+		return "", fmt.Errorf("path must be local and relative")
 	}
 	
 	// Clean and normalize the path
 	cleaned := filepath.Clean(path)
 	
-	// Additional safety: ensure it doesn't start with / after cleaning
-	if strings.HasPrefix(cleaned, "/") {
-		return "", fmt.Errorf("path must be relative")
+	// Final validation: ensure cleaning didn't create an absolute path
+	if strings.HasPrefix(cleaned, "/") || filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("path must be relative after normalization")
 	}
 	
 	return cleaned, nil

@@ -139,10 +139,16 @@ func TestSanitizeFilePath(t *testing.T) {
 			errMsg:  "absolute paths not allowed",
 		},
 		{
+			name:    "windows absolute path with forward slash",
+			path:    "C:/Windows/System32",
+			wantErr: true,
+			errMsg:  "absolute paths not allowed",
+		},
+		{
 			name:    "path becomes absolute after cleaning",
 			path:    "/../etc/passwd",
 			wantErr: true,
-			errMsg:  "path must be relative",
+			errMsg:  "path traversal not allowed",
 		},
 	}
 
@@ -192,12 +198,16 @@ func TestSecurityValidation(t *testing.T) {
 
 	// Test path validation with known bad inputs
 	badPaths := []string{
-		"../etc/passwd",
-		"/etc/passwd",
-		"../../.ssh/id_rsa",
-		"/home/user/.ssh/id_rsa",
-		"C:\\Windows\\System32\\config\\SAM",
-		"src/../../../etc/passwd",
+		"../etc/passwd",                        // Path traversal
+		"/etc/passwd",                          // Unix absolute path
+		"../../.ssh/id_rsa",                    // Multiple path traversal
+		"/home/user/.ssh/id_rsa",               // Unix absolute path
+		"C:\\Windows\\System32\\config\\SAM",   // Windows absolute path with backslash
+		"C:/Windows/System32/config/SAM",       // Windows absolute path with forward slash
+		"D:\\data\\sensitive.txt",              // Different drive letter
+		"src/../../../etc/passwd",              // Path traversal through valid directory
+		"\\\\server\\share\\file.txt",          // UNC path
+		"/usr/bin/../../../etc/passwd",         // Complex traversal
 	}
 
 	for _, path := range badPaths {
