@@ -210,10 +210,8 @@ func showConfig(format string) error {
 
 	switch format {
 	case "yaml":
-		// Use viper to output YAML to stdout
-		if err := state.ConfigManager.GetViper().WriteConfig(); err != nil {
-			// Fallback to manual YAML output
-			fmt.Printf(`log:
+		// Always use manual YAML output for better control
+		fmt.Printf(`log:
   level: %s
   format: %s
   file: "%s"
@@ -249,7 +247,6 @@ ui:
 				state.Config.Cache.MaxEntries, state.Config.Cache.MaxMemoryMB, state.Config.Cache.TTL, state.Config.Cache.EnableLRU,
 				state.Config.Git.CleanupThreshold, state.Config.Git.AutoGC, state.Config.Git.MaxCommits, state.Config.Git.UseShallowClone,
 				state.Config.UI.ProgressIndicators, state.Config.UI.ColorOutput, state.Config.UI.Pager, state.Config.UI.TableFormat)
-		}
 	case "json":
 		// Convert to JSON (simplified version)
 		fmt.Printf(`{
