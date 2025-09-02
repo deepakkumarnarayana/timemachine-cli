@@ -29,8 +29,12 @@ func NewWatcher(state *AppState, gitManager *GitManager) (*Watcher, error) {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Create debouncer with 500ms delay (critical for npm install, etc.)
-	debouncer := NewDebouncer(500 * time.Millisecond)
+	// Create debouncer using configured delay (defaults to 2s, optimal for bulk operations)
+	debounceDelay := 2000 * time.Millisecond // fallback default
+	if state.Config != nil {
+		debounceDelay = state.Config.Watcher.DebounceDelay
+	}
+	debouncer := NewDebouncer(debounceDelay)
 
 	// Create enhanced ignore manager with .timemachine-ignore support
 	ignoreManager := NewEnhancedIgnoreManager(state.ProjectRoot)

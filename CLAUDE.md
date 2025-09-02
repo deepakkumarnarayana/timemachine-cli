@@ -52,7 +52,7 @@ make clean
 
 - **Watcher (`internal/core/watcher.go`)**: Monitors filesystem changes using `fsnotify`
 - **EnhancedIgnoreManager (`internal/core/ignore.go`)**: Thread-safe ignore pattern matching with `.timemachine-ignore` support
-- **Debouncer (`internal/core/debouncer.go`)**: Groups rapid changes (500ms delay) to prevent snapshot spam
+- **Debouncer (`internal/core/debouncer.go`)**: Groups rapid changes (2000ms delay) to prevent snapshot spam
 - **Ignore Patterns**: Uses `.timemachine-ignore` file with gitignore-compatible syntax, includes `.fuse_hidden*` for FUSE filesystems
 - **Recursive Monitoring**: Automatically adds new directories to watch list
 
@@ -80,7 +80,7 @@ All CLI commands are in `internal/commands/`:
 - All snapshots are stored in `.git/timemachine_snapshots/` which is auto-ignored
 
 ### File Watching Best Practices
-- Debounce delay: minimum 500ms to handle bulk operations (npm install, etc.)
+- Debounce delay: 2000ms (2 seconds) to handle bulk operations (npm install, builds, etc.)
 - Recursive directory watching with automatic new directory detection
 - Comprehensive ignore patterns for build artifacts and temporary files
 - Proper signal handling for graceful shutdown
