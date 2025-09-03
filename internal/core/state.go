@@ -5,14 +5,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/config"
 )
 
 // AppState contains the application state and paths
 type AppState struct {
-	ProjectRoot   string // Absolute path to project root (parent of .git)
-	GitDir        string // Path to .git directory
-	ShadowRepoDir string // Path to .git/timemachine_snapshots
-	IsInitialized bool   // Whether shadow repo exists and is valid
+	ProjectRoot     string          // Absolute path to project root (parent of .git)
+	GitDir          string          // Path to .git directory
+	ShadowRepoDir   string          // Path to .git/timemachine_snapshots
+	IsInitialized   bool            // Whether shadow repo exists and is valid
+	Config          *config.Config  // Application configuration
+	ConfigManager   *config.Manager // Configuration manager
+	CurrentBranch   string          // Current Git branch name
+	ShadowBranch    string          // Current shadow repository branch
+	BranchSynced    bool            // Whether shadow branch matches main branch
 }
 
 // NewAppState creates a new AppState by finding the Git repository
@@ -36,6 +43,15 @@ func NewAppState() (*AppState, error) {
 	// Set ShadowRepoDir to .git/timemachine_snapshots
 	shadowRepoDir := filepath.Join(gitDir, "timemachine_snapshots")
 	
+	// Create config manager and load configuration
+	configManager := config.NewManager()
+	
+	// Load configuration (don't fail if config doesn't exist)
+	if err := configManager.Load(projectRoot); err != nil {
+		// Log warning but continue - config is optional
+		fmt.Printf("Warning: failed to load configuration: %v\n", err)
+	}
+	
 	// Check if shadow repo exists by looking for HEAD file
 	headFile := filepath.Join(shadowRepoDir, "HEAD")
 	isInitialized := false
@@ -44,13 +60,91 @@ func NewAppState() (*AppState, error) {
 	}
 
 	return &AppState{
-		ProjectRoot:   projectRoot,
-		GitDir:        gitDir,
-		ShadowRepoDir: shadowRepoDir,
-		IsInitialized: isInitialized,
+		ProjectRoot:     projectRoot,
+		GitDir:          gitDir,
+		ShadowRepoDir:   shadowRepoDir,
+		IsInitialized:   isInitialized,
+		Config:          configManager.Get(),
+		ConfigManager:   configManager,
+		CurrentBranch:   "",  // Will be populated by UpdateBranchState()
+		ShadowBranch:    "",  // Will be populated by UpdateBranchState()
+		BranchSynced:    false, // Will be populated by UpdateBranchState()
 	}, nil
 }
 
+// NewAppStateWithConfig creates a new AppState with custom configuration
+// This is useful for testing or when configuration should be loaded differently
+func NewAppStateWithConfig(configManager *config.Manager) (*AppState, error) {
+	state, err := NewAppState()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Override configuration
+	state.ConfigManager = configManager
+	state.Config = configManager.Get()
+	
+	return state, nil
+}
+
+// UpdateBranchState updates the current branch information and ensures shadow branch sync
+func (s *AppState) UpdateBranchState() error {
+	// Only update if initialized
+	if !s.IsInitialized {
+		return nil
+	}
+	
+	// Create a temporary GitManager to get branch info
+	gitManager := NewGitManager(s)
+	
+	// Get current main branch
+	currentBranch, err := gitManager.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	s.CurrentBranch = currentBranch
+	
+	// Get current shadow branch
+	shadowBranch, err := gitManager.GetCurrentShadowBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get shadow branch: %w", err)
+	}
+	s.ShadowBranch = shadowBranch
+	
+	// Check if branches are synced
+	s.BranchSynced = (s.CurrentBranch == s.ShadowBranch)
+	
+	return nil
+}
+
+// EnsureBranchSync ensures the shadow repository branch matches the main repository branch
+func (s *AppState) EnsureBranchSync() error {
+	if !s.IsInitialized {
+		return fmt.Errorf("shadow repository not initialized")
+	}
+	
+	// Update branch state first
+	if err := s.UpdateBranchState(); err != nil {
+		return fmt.Errorf("failed to update branch state: %w", err)
+	}
+	
+	// If already synced, nothing to do
+	if s.BranchSynced {
+		return nil
+	}
+	
+	// Create GitManager and switch to correct shadow branch
+	gitManager := NewGitManager(s)
+	if err := gitManager.SwitchOrCreateShadowBranch(s.CurrentBranch); err != nil {
+		return fmt.Errorf("failed to sync shadow branch: %w", err)
+	}
+	
+	// Update state
+	s.ShadowBranch = s.CurrentBranch
+	s.BranchSynced = true
+	
+	return nil
+}
 // findGitDir searches for a .git directory starting from the given directory
 // and walking up the directory tree until it finds one or reaches the filesystem root
 func findGitDir(startDir string) string {
