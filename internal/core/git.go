@@ -4,18 +4,44 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 // GitManager wraps all Git operations for the shadow repository
 type GitManager struct {
 	State *AppState
+	// Security enhancement: Operation-level locking to prevent race conditions
+	operationMutex sync.Mutex
 }
 
 // NewGitManager creates a new GitManager with the given state
 func NewGitManager(state *AppState) *GitManager {
 	return &GitManager{State: state}
+}
+
+// isValidBranchName validates branch names according to Git naming rules
+// Security enhancement: Prevents command injection and malformed branch names
+func isValidBranchName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	
+	// Git branch name rules - only allow safe characters
+	matched, err := regexp.MatchString(`^[a-zA-Z0-9/_.-]+$`, name)
+	if err != nil || !matched {
+		return false
+	}
+	
+	// Additional Git branch name restrictions
+	return !strings.HasPrefix(name, "-") && 
+		   !strings.HasPrefix(name, ".") &&
+		   !strings.HasSuffix(name, ".") &&
+		   !strings.Contains(name, "..") &&
+		   !strings.Contains(name, "//") &&
+		   name != "HEAD"
 }
 
 // RunCommand executes a git command with the shadow repo as the git directory
@@ -115,9 +141,18 @@ func (g *GitManager) copyGitConfig() error {
 
 // CreateSnapshot creates a new snapshot in the shadow repository
 func (g *GitManager) CreateSnapshot(message string) error {
+	// Security enhancement: Operation-level locking to prevent race conditions
+	g.operationMutex.Lock()
+	defer g.operationMutex.Unlock()
+	
 	// Ensure we're on the correct shadow branch before creating snapshot
 	if err := g.State.EnsureBranchSync(); err != nil {
 		return fmt.Errorf("failed to sync shadow branch: %w", err)
+	}
+	
+	// Double-check branch state hasn't changed during operation
+	if err := g.State.EnsureValidBranchState(); err != nil {
+		return fmt.Errorf("branch state changed during operation: %w", err)
 	}
 	
 	// Stage everything including untracked files
@@ -218,6 +253,10 @@ func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, erro
 // NEVER use checkout or reset - they affect staging area
 // ALWAYS use git restore --source=<hash> --worktree
 func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
+	// Security enhancement: Operation-level locking to prevent race conditions
+	g.operationMutex.Lock()
+	defer g.operationMutex.Unlock()
+	
 	args := []string{"restore", "--source=" + hash, "--worktree"}
 	
 	if len(files) == 0 {
@@ -274,6 +313,11 @@ func (g *GitManager) GetCurrentShadowBranch() (string, error) {
 
 // SwitchOrCreateShadowBranch switches to or creates a branch in the shadow repository
 func (g *GitManager) SwitchOrCreateShadowBranch(branchName string) error {
+	// Security enhancement: Validate branch name to prevent command injection
+	if !isValidBranchName(branchName) {
+		return fmt.Errorf("invalid branch name: %s (contains unsafe characters)", branchName)
+	}
+	
 	// First check if branch exists
 	_, err := g.RunCommand("rev-parse", "--verify", branchName)
 	if err != nil {

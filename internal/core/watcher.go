@@ -268,6 +268,12 @@ func (w *Watcher) handleBranchChange() {
 		return
 	}
 
+	// Security enhancement: Validate branch name to prevent injection attacks
+	if !isValidBranchName(currentBranch) {
+		fmt.Printf("Warning: invalid branch name detected during HEAD change: %s\n", currentBranch)
+		return
+	}
+
 	// Check if branch actually changed
 	if currentBranch == w.lastBranch {
 		return // No change, ignore
