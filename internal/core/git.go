@@ -35,13 +35,16 @@ func isValidBranchName(name string) bool {
 		return false
 	}
 	
-	// Additional Git branch name restrictions
-	return !strings.HasPrefix(name, "-") && 
-		   !strings.HasPrefix(name, ".") &&
-		   !strings.HasSuffix(name, ".") &&
-		   !strings.Contains(name, "..") &&
-		   !strings.Contains(name, "//") &&
-		   name != "HEAD"
+	// Additional Git branch name restrictions (based on git-check-ref-format)
+	return !strings.HasPrefix(name, ".") &&      // No leading dots
+		   !strings.HasSuffix(name, ".") &&      // No trailing dots  
+		   !strings.Contains(name, "..") &&      // No consecutive dots
+		   !strings.Contains(name, "//") &&      // No consecutive slashes
+		   !strings.HasPrefix(name, "/") &&      // No leading slash
+		   !strings.HasSuffix(name, "/") &&      // No trailing slash
+		   !strings.Contains(name, "@{") &&      // No @{ sequence
+		   !strings.HasSuffix(name, ".lock") &&  // No .lock suffix
+		   name != "HEAD" && name != "@"          // No reserved names
 }
 
 // RunCommand executes a git command with the shadow repo as the git directory
