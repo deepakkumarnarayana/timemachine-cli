@@ -32,3 +32,10 @@ build/
 
 # Time Machine shadow repository
 .git/timemachine_snapshots/
+dk/test.txt
+.fuse_hidden0009fdee0000ae11
+.fuse_hidden*
+
+# Test coverage files
+*.out
+*_coverage.out

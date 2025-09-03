@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/config"
 )
 
 // AppState contains the application state and paths
 type AppState struct {
-	ProjectRoot   string // Absolute path to project root (parent of .git)
-	GitDir        string // Path to .git directory
-	ShadowRepoDir string // Path to .git/timemachine_snapshots
-	IsInitialized bool   // Whether shadow repo exists and is valid
+	ProjectRoot   string          // Absolute path to project root (parent of .git)
+	GitDir        string          // Path to .git directory
+	ShadowRepoDir string          // Path to .git/timemachine_snapshots
+	IsInitialized bool            // Whether shadow repo exists and is valid
+	Config        *config.Config  // Application configuration
+	ConfigManager *config.Manager // Configuration manager
 }
 
 // NewAppState creates a new AppState by finding the Git repository
@@ -43,12 +47,38 @@ func NewAppState() (*AppState, error) {
 		isInitialized = true
 	}
 
+	// Initialize configuration manager
+	configManager := config.NewManager()
+	
+	// Load configuration (don't fail if config doesn't exist)
+	if err := configManager.Load(projectRoot); err != nil {
+		// Log warning but continue - config is optional
+		fmt.Printf("Warning: failed to load configuration: %v\n", err)
+	}
+
 	return &AppState{
 		ProjectRoot:   projectRoot,
 		GitDir:        gitDir,
 		ShadowRepoDir: shadowRepoDir,
 		IsInitialized: isInitialized,
+		Config:        configManager.Get(),
+		ConfigManager: configManager,
 	}, nil
+}
+
+// NewAppStateWithConfig creates a new AppState with custom configuration
+// This is useful for testing or when configuration should be loaded differently
+func NewAppStateWithConfig(configManager *config.Manager) (*AppState, error) {
+	state, err := NewAppState()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Override configuration
+	state.ConfigManager = configManager
+	state.Config = configManager.Get()
+	
+	return state, nil
 }
 
 // findGitDir searches for a .git directory starting from the given directory

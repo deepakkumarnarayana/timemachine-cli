@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,12 +13,13 @@ import (
 
 // Watcher monitors file system changes and creates snapshots
 type Watcher struct {
-	fsWatcher  *fsnotify.Watcher
-	gitManager *GitManager
-	debouncer  *Debouncer
-	stopChan   chan bool
-	wg         sync.WaitGroup
-	state      *AppState
+	fsWatcher     *fsnotify.Watcher
+	gitManager    *GitManager
+	debouncer     *Debouncer
+	stopChan      chan bool
+	wg            sync.WaitGroup
+	state         *AppState
+	ignoreManager *EnhancedIgnoreManager
 }
 
 // NewWatcher creates a new file system watcher
@@ -29,15 +29,23 @@ func NewWatcher(state *AppState, gitManager *GitManager) (*Watcher, error) {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Create debouncer with 500ms delay (critical for npm install, etc.)
-	debouncer := NewDebouncer(500 * time.Millisecond)
+	// Create debouncer using configured delay (defaults to 2s, optimal for bulk operations)
+	debounceDelay := 2000 * time.Millisecond // fallback default
+	if state.Config != nil {
+		debounceDelay = state.Config.Watcher.DebounceDelay
+	}
+	debouncer := NewDebouncer(debounceDelay)
+
+	// Create enhanced ignore manager with .timemachine-ignore support
+	ignoreManager := NewEnhancedIgnoreManager(state.ProjectRoot)
 
 	return &Watcher{
-		fsWatcher:  fsWatcher,
-		gitManager: gitManager,
-		debouncer:  debouncer,
-		stopChan:   make(chan bool),
-		state:      state,
+		fsWatcher:     fsWatcher,
+		gitManager:    gitManager,
+		debouncer:     debouncer,
+		stopChan:      make(chan bool),
+		state:         state,
+		ignoreManager: ignoreManager,
 	}, nil
 }
 
@@ -87,8 +95,8 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 			return nil
 		}
 
-		// Skip ignored directories
-		if w.shouldIgnoreDirectory(path) {
+		// Skip ignored directories using new IgnoreManager
+		if w.ignoreManager.ShouldIgnoreDirectory(path) {
 			return filepath.SkipDir
 		}
 
@@ -102,71 +110,16 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 	})
 }
 
-// shouldIgnoreDirectory checks if a directory should be ignored
+// shouldIgnoreDirectory checks if a directory should be ignored (DEPRECATED - use IgnoreManager)
 func (w *Watcher) shouldIgnoreDirectory(path string) bool {
-	// Get relative path from project root
-	relPath, err := filepath.Rel(w.state.ProjectRoot, path)
-	if err != nil {
-		return false
-	}
-
-	// Normalize path separators
-	relPath = filepath.ToSlash(relPath)
-
-	// Ignore patterns
-	ignorePatterns := []string{
-		".git",
-		"node_modules",
-		"dist",
-		"build",
-		"__pycache__",
-		".next",
-		".nuxt",
-		"target", // Rust
-		"bin",    // Go
-		"obj",    // .NET
-		".vscode",
-		".idea",
-		"coverage",
-		".nyc_output",
-		".cache",
-	}
-
-	for _, pattern := range ignorePatterns {
-		if strings.HasPrefix(relPath, pattern+"/") || relPath == pattern {
-			return true
-		}
-	}
-
-	return false
+	// Delegate to new IgnoreManager for backward compatibility
+	return w.ignoreManager.ShouldIgnoreDirectory(path)
 }
 
-// shouldIgnoreFile checks if a file should be ignored
+// shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
 func (w *Watcher) shouldIgnoreFile(path string) bool {
-	filename := filepath.Base(path)
-	
-	// Ignore common temporary/swap files
-	ignorePatterns := []string{
-		".swp", ".swo", ".swn", // Vim
-		"~",                    // Backup files
-		".tmp", ".temp",        // Temporary files
-		".DS_Store",           // macOS
-		"Thumbs.db",           // Windows
-		".log",                // Log files
-	}
-
-	for _, pattern := range ignorePatterns {
-		if strings.HasSuffix(filename, pattern) {
-			return true
-		}
-	}
-
-	// Ignore files in timemachine_snapshots
-	if strings.Contains(path, "timemachine_snapshots") {
-		return true
-	}
-
-	return false
+	// Delegate to new IgnoreManager for backward compatibility
+	return w.ignoreManager.ShouldIgnoreFile(path)
 }
 
 // eventLoop processes file system events
@@ -204,7 +157,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	// If a new directory was created, add it to watch list
 	if event.Op&fsnotify.Create == fsnotify.Create {
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-			if !w.shouldIgnoreDirectory(event.Name) {
+			if !w.ignoreManager.ShouldIgnoreDirectory(event.Name) {
 				if err := w.addDirectoryRecursive(event.Name); err != nil {
 					fmt.Printf("Warning: couldn't watch new directory %s: %v\n", event.Name, err)
 				}

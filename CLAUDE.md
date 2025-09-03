@@ -51,17 +51,19 @@ make clean
 ### File Watching System
 
 - **Watcher (`internal/core/watcher.go`)**: Monitors filesystem changes using `fsnotify`
-- **Debouncer (`internal/core/debouncer.go`)**: Groups rapid changes (500ms delay) to prevent snapshot spam
-- **Ignore Patterns**: Automatically ignores `.git/`, `node_modules/`, `dist/`, `__pycache__/`, swap files, etc.
+- **EnhancedIgnoreManager (`internal/core/ignore.go`)**: Thread-safe ignore pattern matching with `.timemachine-ignore` support
+- **Debouncer (`internal/core/debouncer.go`)**: Groups rapid changes (2000ms delay) to prevent snapshot spam
+- **Ignore Patterns**: Uses `.timemachine-ignore` file with gitignore-compatible syntax, includes `.fuse_hidden*` for FUSE filesystems
 - **Recursive Monitoring**: Automatically adds new directories to watch list
 
 ### Command Structure
 
 All CLI commands are in `internal/commands/`:
-- **init**: Creates shadow repo, updates `.gitignore`, installs cleanup hooks
+- **init**: Creates shadow repo, updates `.gitignore`, creates default `.timemachine-ignore`, installs cleanup hooks
 - **start**: Launches file watcher with signal handling (Ctrl+C)
 - **list**: Shows snapshots with filtering and pagination
 - **show**: Displays detailed snapshot information with file changes
+- **inspect**: Advanced snapshot analysis with deleted file recovery, search-all functionality, and security-hardened input validation
 - **restore**: Safely restores files using `git restore --worktree` (never affects staging)
 
 ## Critical Implementation Rules
@@ -78,17 +80,24 @@ All CLI commands are in `internal/commands/`:
 - All snapshots are stored in `.git/timemachine_snapshots/` which is auto-ignored
 
 ### File Watching Best Practices
-- Debounce delay: minimum 500ms to handle bulk operations (npm install, etc.)
+- Debounce delay: 2000ms (2 seconds) to handle bulk operations (npm install, builds, etc.)
 - Recursive directory watching with automatic new directory detection
 - Comprehensive ignore patterns for build artifacts and temporary files
 - Proper signal handling for graceful shutdown
+
+### Security Implementation
+- **Input Validation**: All Git hashes validated with regex `^[a-fA-F0-9]{4,40}$`
+- **Path Sanitization**: File filter paths checked for traversal attacks (`..` patterns blocked)
+- **Command Injection Prevention**: No user input directly passed to shell commands
+- **Relative Path Enforcement**: Absolute paths blocked in file filters
 
 ## Key Files and Their Purpose
 
 ### Core Logic
 - `internal/core/state.go`: Git repository discovery and application state
 - `internal/core/git.go`: Shadow repository operations and snapshot management
-- `internal/core/watcher.go`: File system monitoring and event handling
+- `internal/core/watcher.go`: File system monitoring and event handling with enhanced ignore manager
+- `internal/core/ignore.go`: Thread-safe ignore pattern matching with comprehensive gitignore-compatible syntax
 - `internal/core/debouncer.go`: Change grouping to prevent snapshot spam
 
 ### Testing

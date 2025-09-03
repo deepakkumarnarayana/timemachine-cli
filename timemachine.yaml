@@ -1,0 +1,25 @@
+cache:
+    enable_lru: true
+    max_entries: 10000
+    max_memory_mb: 50
+    ttl: 1h
+git:
+    auto_gc: true
+    cleanup_threshold: 100
+    max_commits: 1000
+    use_shallow_clone: false
+log:
+    file: ""
+    format: text
+    level: info
+ui:
+    color_output: true
+    pager: auto
+    progress_indicators: true
+    table_format: table
+watcher:
+    batch_size: 100
+    debounce_delay: 5s
+    enable_recursive: true
+    ignore_patterns: []
+    max_watched_files: 100000
