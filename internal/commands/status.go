@@ -63,6 +63,22 @@ func runStatus(verbose bool) error {
 		if verbose {
 			fmt.Printf("   Shadow repository: %s\n", state.ShadowRepoDir)
 		}
+
+		// Phase 3B: Show branch context
+		if err := state.EnsureValidBranchState(); err != nil {
+			color.Yellow("⚠️  Branch state: %v", err)
+		} else {
+			currentBranch, shadowBranch, synced, err := state.GetBranchContext()
+			if err != nil {
+				color.Yellow("⚠️  Branch context: %v", err)
+			} else {
+				if synced {
+					color.Green("🌿 Branch: %s (synchronized)", currentBranch)
+				} else {
+					color.Yellow("🌿 Branch: %s → %s (synchronizing...)", currentBranch, shadowBranch)
+				}
+			}
+		}
 	} else {
 		color.Yellow("⚠️  Status: Not initialized")
 		fmt.Println("   Run 'timemachine init' to get started")

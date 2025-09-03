@@ -205,23 +205,32 @@ func (s *AppState) EnsureValidBranchState() error {
 	if err := s.ValidateBranchState(); err != nil {
 		// State is invalid or stale, refresh it
 		if refreshErr := s.RefreshBranchState(); refreshErr != nil {
-			return fmt.Errorf("failed to refresh branch state: %w (validation error: %v)", refreshErr, err)
+			return s.enhancedError("refresh branch state", refreshErr, 
+				"This usually happens when Git operations fail or when switching between branches. "+
+				"Ensure you're in a valid Git repository and have proper permissions.")
 		}
 		
 		// Try validation again after refresh
 		if err := s.ValidateBranchState(); err != nil {
-			return fmt.Errorf("branch state still invalid after refresh: %w", err)
+			return s.enhancedError("validate branch state after refresh", err,
+				"Branch state corruption detected. Try running 'git status' to check your repository state.")
 		}
 	}
 
 	// Ensure branches are synchronized
 	if !s.BranchSynced {
 		if err := s.EnsureBranchSync(); err != nil {
-			return fmt.Errorf("failed to synchronize branches: %w", err)
+			return s.enhancedError("synchronize shadow branches", err,
+				"Shadow branch synchronization failed. This can happen during branch switches or if the shadow repository is corrupted.")
 		}
 	}
 
 	return nil
+}
+
+// enhancedError creates user-friendly error messages with context (Phase 3C: Enhanced UX)
+func (s *AppState) enhancedError(operation string, err error, userMessage string) error {
+	return fmt.Errorf("failed to %s: %w\n\nℹ️  %s", operation, err, userMessage)
 }
 
 // GetBranchContext returns current branch context in a thread-safe manner (Phase 3A: Lifecycle Management)

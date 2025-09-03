@@ -24,8 +24,25 @@ main Git repository.`,
 			fmt.Printf("Time Machine CLI v%s\n", Version)
 			return
 		}
-		fmt.Println("⏰ Time Machine CLI")
-		fmt.Println("Use 'timemachine --help' for available commands")
+		
+		// Show enhanced help with current status
+		state, err := core.NewAppState()
+		if err != nil {
+			fmt.Printf("⚠️  Warning: %v\n", err)
+			fmt.Println("   Some commands may not work outside of a Git repository.\n")
+		} else {
+			fmt.Printf("📂 Git Repository: %s\n", state.ProjectRoot)
+			if state.IsInitialized {
+				fmt.Println("✅ Time Machine: Initialized and ready")
+			} else {
+				fmt.Println("❌ Time Machine: Not initialized")
+				fmt.Println("   Run 'timemachine init' to get started")
+			}
+			fmt.Println()
+		}
+		
+		fmt.Println("Use 'timemachine --help' for detailed command information")
+		fmt.Println("Use 'timemachine <command> --help' for specific command help")
 	},
 }
 
@@ -33,14 +50,17 @@ func init() {
 	// Add version flag
 	rootCmd.Flags().BoolP("version", "v", false, "Show version information")
 	
-	// Add commands
-	rootCmd.AddCommand(commands.InitCmd())
-	rootCmd.AddCommand(commands.StartCmd())
-	rootCmd.AddCommand(commands.ListCmd())
-	rootCmd.AddCommand(commands.ShowCmd())
-	rootCmd.AddCommand(commands.RestoreCmd())
-	rootCmd.AddCommand(commands.StatusCmd())
-	rootCmd.AddCommand(commands.CleanCmd())
+	// Add commands in logical order
+	rootCmd.AddCommand(commands.InitCmd())      // Setup
+	rootCmd.AddCommand(commands.ConfigCmd())    // Configuration  
+	rootCmd.AddCommand(commands.StartCmd())     // Core functionality
+	rootCmd.AddCommand(commands.ListCmd())      // Inspection
+	rootCmd.AddCommand(commands.ShowCmd())      // Inspection
+	rootCmd.AddCommand(commands.InspectCmd())   // Inspection
+	rootCmd.AddCommand(commands.RestoreCmd())   // Recovery
+	rootCmd.AddCommand(commands.StatusCmd())    // Status
+	rootCmd.AddCommand(commands.BranchCmd())    // Branch management (Phase 4)
+	rootCmd.AddCommand(commands.CleanCmd())     // Maintenance
 }
 
 func main() {

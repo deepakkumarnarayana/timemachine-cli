@@ -70,6 +70,13 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 		return nil
 	}
 
+	// Phase 3B: Ensure valid branch state (only for non-quiet mode)
+	if !quiet {
+		if err := state.EnsureValidBranchState(); err != nil {
+			return fmt.Errorf("branch state validation failed: %w", err)
+		}
+	}
+
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 

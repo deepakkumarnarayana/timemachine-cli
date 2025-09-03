@@ -273,11 +273,12 @@ func (w *Watcher) handleBranchChange() {
 		return // No change, ignore
 	}
 
-	// Log branch change
+	// Log branch change (Phase 3C: Enhanced UX)
 	if w.lastBranch != "" {
 		color.Cyan("🌿 Branch changed: %s → %s", w.lastBranch, currentBranch)
+		fmt.Printf("   Creating shadow branch for %s and synchronizing state...\n", currentBranch)
 	} else {
-		color.Cyan("🌿 Branch detected: %s", currentBranch)
+		color.Green("🌿 Initialized on branch: %s", currentBranch)
 	}
 
 	// Update tracking
@@ -296,7 +297,13 @@ func (w *Watcher) handleBranchChange() {
 
 // createSnapshot creates a snapshot (called after debounce delay)
 func (w *Watcher) createSnapshot() {
-	fmt.Print("📸 Creating snapshot... ")
+	// Get branch context for enhanced messaging (Phase 3C: Enhanced UX)
+	currentBranch, _, _, err := w.state.GetBranchContext()
+	if err != nil {
+		currentBranch = "unknown"
+	}
+	
+	fmt.Printf("📸 Creating snapshot on branch '%s'... ", currentBranch)
 	
 	if err := w.gitManager.CreateSnapshot(""); err != nil {
 		color.Red("❌ Error: %v", err)
