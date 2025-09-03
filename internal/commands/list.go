@@ -53,9 +53,12 @@ func runList(filePath string, limit int, allBranches bool) error {
 		return nil
 	}
 
-	// Phase 3B: Ensure valid branch state
+	// Phase 3B: Ensure valid branch state with graceful degradation
 	if err := state.EnsureValidBranchState(); err != nil {
-		return fmt.Errorf("branch state validation failed: %w", err)
+		color.Yellow("⚠️  Warning: Branch state validation failed: %v", err)
+		fmt.Println("   Continuing with limited functionality. Some branch-specific features may not work correctly.")
+		fmt.Println("   Try 'timemachine branch' to check branch status or re-run this command.")
+		fmt.Println()
 	}
 
 	// Create Git manager

@@ -11,6 +11,7 @@ import (
 // BranchCmd creates the branch command for managing TimeMachine branch state (Phase 4: CLI Safety)
 func BranchCmd() *cobra.Command {
 	var verbose bool
+	var reset bool
 
 	cmd := &cobra.Command{
 		Use:   "branch",
@@ -23,18 +24,20 @@ This command displays:
 - Shadow repository branch structure
 - Recent branch switches and their impact
 
-Use --verbose for detailed shadow repository information.`,
+Use --verbose for detailed shadow repository information.
+Use --reset to force reset branch state when stuck after failed branch operations.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBranchStatus(verbose)
+			return runBranchStatus(verbose, reset)
 		},
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed branch and repository information")
+	cmd.Flags().BoolVar(&reset, "reset", false, "Force reset branch state (use when stuck after failed branch operations)")
 
 	return cmd
 }
 
-func runBranchStatus(verbose bool) error {
+func runBranchStatus(verbose bool, reset bool) error {
 	// Create application state
 	state, err := core.NewAppState()
 	if err != nil {
@@ -48,14 +51,25 @@ func runBranchStatus(verbose bool) error {
 		return nil
 	}
 
-	// Ensure valid branch state
+	// Handle reset flag - force reset branch state
+	if reset {
+		fmt.Println("🔄 Resetting branch state...")
+		state.ForceResetBranchState()
+		color.Green("✅ Branch state reset successfully!")
+		fmt.Println("   You can now retry TimeMachine operations.")
+		fmt.Println("   Next command will automatically resynchronize the branch state.")
+		return nil
+	}
+
+	// Ensure valid branch state with error recovery guidance
 	if err := state.EnsureValidBranchState(); err != nil {
 		color.Red("❌ Branch state error: %v", err)
 		fmt.Println()
 		fmt.Println("💡 Try these troubleshooting steps:")
-		fmt.Println("   1. Run 'git status' to check your repository state")
-		fmt.Println("   2. Ensure you're in a valid Git repository")
-		fmt.Println("   3. Check that TimeMachine was properly initialized")
+		fmt.Println("   1. Run 'timemachine branch --reset' to reset the branch state")
+		fmt.Println("   2. Run 'git status' to check your repository state")
+		fmt.Println("   3. Ensure you're in a valid Git repository")
+		fmt.Println("   4. Check that TimeMachine was properly initialized")
 		return nil
 	}
 

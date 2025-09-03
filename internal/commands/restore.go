@@ -55,9 +55,12 @@ func runRestore(hash string, files []string, force bool) error {
 		return nil
 	}
 
-	// Phase 3B: Ensure valid branch state
+	// Phase 3B: Ensure valid branch state with graceful degradation
 	if err := state.EnsureValidBranchState(); err != nil {
-		return fmt.Errorf("branch state validation failed: %w", err)
+		color.Yellow("⚠️  Warning: Branch state validation failed: %v", err)
+		fmt.Println("   Continuing with restore operation. Some branch-specific features may not work correctly.")
+		fmt.Println("   Try 'timemachine branch --reset' to reset branch state if issues persist.")
+		fmt.Println()
 	}
 
 	// Create Git manager

@@ -43,11 +43,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Phase 3B: Pre-flight branch state validation
+	// Phase 3B: Pre-flight branch state validation with recovery guidance
 	fmt.Print("🔍 Validating branch state... ")
 	if err := state.EnsureValidBranchState(); err != nil {
 		color.Red("❌")
-		return fmt.Errorf("branch state validation failed: %w", err)
+		fmt.Println()
+		color.Red("Branch state validation failed: %v", err)
+		fmt.Println()
+		fmt.Println("💡 To fix this issue:")
+		fmt.Println("   1. Run 'timemachine branch --reset' to reset the branch state")
+		fmt.Println("   2. Then retry 'timemachine start'")
+		fmt.Println("   3. If the problem persists, check 'git status' and ensure you're in a valid Git repository")
+		return nil
 	}
 	color.Green("✅")
 

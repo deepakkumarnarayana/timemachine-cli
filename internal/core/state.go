@@ -124,6 +124,9 @@ func (s *AppState) EnsureBranchSync() error {
 	// Create GitManager and switch to correct shadow branch
 	gitManager := NewGitManager(s)
 	if err := gitManager.SwitchOrCreateShadowBranch(s.CurrentBranch); err != nil {
+		// Critical: Reset branch sync state to allow recovery on next attempt
+		s.BranchSynced = false
+		s.InvalidateBranchCache()
 		return fmt.Errorf("failed to sync shadow branch: %w", err)
 	}
 	
@@ -251,6 +254,18 @@ func (s *AppState) InvalidateBranchCache() {
 	defer s.stateMutex.Unlock()
 	
 	s.branchCacheTime = time.Time{} // Zero time indicates no cache
+}
+
+// ForceResetBranchState performs a complete reset of branch state for recovery (Phase 4: Error Recovery)
+func (s *AppState) ForceResetBranchState() {
+	s.stateMutex.Lock()
+	defer s.stateMutex.Unlock()
+	
+	// Reset all branch-related state
+	s.BranchSynced = false
+	s.CurrentBranch = ""
+	s.ShadowBranch = ""
+	s.branchCacheTime = time.Time{} // Invalidate cache
 }
 
 // findGitDir searches for a .git directory starting from the given directory
