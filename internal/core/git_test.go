@@ -206,13 +206,13 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
 	defer os.RemoveAll(tempDir)
 
-	// Test empty repository
+	// Test repository with initial commit (shadow repo now creates initial commit during init)
 	snapshots, err := gitManager.ListSnapshots(10, "")
 	if err != nil {
-		t.Fatalf("Failed to list snapshots from empty repo: %v", err)
+		t.Fatalf("Failed to list snapshots from repo: %v", err)
 	}
-	if len(snapshots) != 0 {
-		t.Errorf("Expected 0 snapshots from empty repo, got %d", len(snapshots))
+	if len(snapshots) != 1 {
+		t.Errorf("Expected 1 snapshot from initialized repo (initial commit), got %d", len(snapshots))
 	}
 
 	// Create test files and snapshots
@@ -240,8 +240,8 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list all snapshots: %v", err)
 	}
-	if len(snapshots) != 3 {
-		t.Errorf("Expected 3 snapshots, got %d", len(snapshots))
+	if len(snapshots) != 4 {
+		t.Errorf("Expected 4 snapshots (3 file snapshots + 1 initial commit), got %d", len(snapshots))
 	}
 
 	// Test limit

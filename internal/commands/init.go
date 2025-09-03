@@ -63,7 +63,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	color.Green("✅")
 
-	// Step 3: Install post-push hook
+	// Step 3: Create default .timemachine-ignore file
+	fmt.Print("  Creating .timemachine-ignore... ")
+	if err := createDefaultTimemachineIgnore(state.ProjectRoot); err != nil {
+		color.Red("❌")
+		return fmt.Errorf("failed to create .timemachine-ignore: %w", err)
+	}
+	color.Green("✅")
+
+	// Step 4: Install post-push hook
 	fmt.Print("  Installing auto-cleanup hook... ")
 	if err := installPostPushHook(state.GitDir); err != nil {
 		color.Red("❌")
@@ -71,7 +79,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	color.Green("✅")
 
-	// Step 4: Create initial snapshot
+	// Step 5: Create initial snapshot
 	fmt.Print("  Creating initial snapshot... ")
 	if err := gitManager.CreateSnapshot("Initial Time Machine snapshot"); err != nil {
 		color.Red("❌")
@@ -153,6 +161,72 @@ func updateGitignore(projectRoot string) error {
 	for _, line := range timemachineSection {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write Time Machine section: %w", err)
+		}
+	}
+	
+	return writer.Flush()
+}
+
+// createDefaultTimemachineIgnore creates a .timemachine-ignore file with default patterns
+func createDefaultTimemachineIgnore(projectRoot string) error {
+	ignorePath := filepath.Join(projectRoot, ".timemachine-ignore")
+	
+	// Check if file already exists
+	if _, err := os.Stat(ignorePath); err == nil {
+		return nil // File already exists, don't overwrite
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check .timemachine-ignore: %w", err)
+	}
+	
+	// Default patterns for common files to ignore
+	defaultPatterns := []string{
+		"# Default TimeMachine ignore patterns",
+		"# Generated automatically - feel free to customize",
+		"",
+		"# Build artifacts",
+		"build/",
+		"dist/",
+		"node_modules/",
+		"__pycache__/",
+		"*.pyc",
+		"target/",
+		"",
+		"# Log files",
+		"*.log",
+		"logs/",
+		"",
+		"# Temporary files",
+		"*.tmp",
+		"*.temp",
+		"*~",
+		".DS_Store",
+		"Thumbs.db",
+		"",
+		"# FUSE filesystem temporary files",
+		".fuse_hidden*",
+		"",
+		"# System files",
+		".git/",
+		"*.swp",
+		"*.swo",
+		".vscode/",
+		".idea/",
+		"",
+		"# Add your custom patterns below this line",
+		"",
+	}
+	
+	// Create the file
+	file, err := os.Create(ignorePath)
+	if err != nil {
+		return fmt.Errorf("failed to create .timemachine-ignore: %w", err)
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	for _, line := range defaultPatterns {
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			return fmt.Errorf("failed to write pattern: %w", err)
 		}
 	}
 	

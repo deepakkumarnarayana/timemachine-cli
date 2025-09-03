@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,12 +13,15 @@ import (
 
 // Watcher monitors file system changes and creates snapshots
 type Watcher struct {
-	fsWatcher  *fsnotify.Watcher
-	gitManager *GitManager
-	debouncer  *Debouncer
-	stopChan   chan bool
-	wg         sync.WaitGroup
-	state      *AppState
+	fsWatcher     *fsnotify.Watcher
+	gitManager    *GitManager
+	debouncer     *Debouncer
+	stopChan      chan bool
+	wg            sync.WaitGroup
+	state         *AppState
+	ignoreManager *EnhancedIgnoreManager
+	lastBranch    string // Track last known branch for change detection
+	branchMutex   sync.RWMutex // Protect branch state access
 }
 
 // NewWatcher creates a new file system watcher
@@ -29,15 +31,32 @@ func NewWatcher(state *AppState, gitManager *GitManager) (*Watcher, error) {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Create debouncer with 500ms delay (critical for npm install, etc.)
-	debouncer := NewDebouncer(500 * time.Millisecond)
+	// Create debouncer using configured delay (defaults to 2s, optimal for bulk operations)
+	debounceDelay := 2000 * time.Millisecond // fallback default
+	if state.Config != nil {
+		debounceDelay = state.Config.Watcher.DebounceDelay
+	}
+	debouncer := NewDebouncer(debounceDelay)
+
+	// Create enhanced ignore manager with .timemachine-ignore support
+	ignoreManager := NewEnhancedIgnoreManager(state.ProjectRoot)
+
+	// Get initial branch state for tracking
+	initialBranch, err := gitManager.GetCurrentBranch()
+	if err != nil {
+		// Don't fail completely, just log warning and continue
+		fmt.Printf("Warning: failed to get initial branch: %v\n", err)
+		initialBranch = ""
+	}
 
 	return &Watcher{
-		fsWatcher:  fsWatcher,
-		gitManager: gitManager,
-		debouncer:  debouncer,
-		stopChan:   make(chan bool),
-		state:      state,
+		fsWatcher:     fsWatcher,
+		gitManager:    gitManager,
+		debouncer:     debouncer,
+		stopChan:      make(chan bool),
+		state:         state,
+		ignoreManager: ignoreManager,
+		lastBranch:    initialBranch,
 	}, nil
 }
 
@@ -46,6 +65,18 @@ func (w *Watcher) Start() error {
 	// Add project root and subdirectories to watch
 	if err := w.addDirectoryRecursive(w.state.ProjectRoot); err != nil {
 		return fmt.Errorf("failed to add directories to watch: %w", err)
+	}
+
+	// Add .git/HEAD to watch for branch changes (Phase 2: Real-time branch awareness)
+	gitHeadPath := filepath.Join(w.state.GitDir, "HEAD")
+	if err := w.fsWatcher.Add(gitHeadPath); err != nil {
+		fmt.Printf("Warning: couldn't watch Git HEAD file for branch changes: %v\n", err)
+		// Don't fail completely - branch watching is enhancement, not critical
+	}
+
+	// Ensure initial branch sync before creating snapshot
+	if err := w.state.EnsureBranchSync(); err != nil {
+		fmt.Printf("Warning: failed to sync initial branch state: %v\n", err)
 	}
 
 	// Create initial snapshot
@@ -87,8 +118,8 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 			return nil
 		}
 
-		// Skip ignored directories
-		if w.shouldIgnoreDirectory(path) {
+		// Skip ignored directories using new IgnoreManager
+		if w.ignoreManager.ShouldIgnoreDirectory(path) {
 			return filepath.SkipDir
 		}
 
@@ -102,71 +133,16 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 	})
 }
 
-// shouldIgnoreDirectory checks if a directory should be ignored
+// shouldIgnoreDirectory checks if a directory should be ignored (DEPRECATED - use IgnoreManager)
 func (w *Watcher) shouldIgnoreDirectory(path string) bool {
-	// Get relative path from project root
-	relPath, err := filepath.Rel(w.state.ProjectRoot, path)
-	if err != nil {
-		return false
-	}
-
-	// Normalize path separators
-	relPath = filepath.ToSlash(relPath)
-
-	// Ignore patterns
-	ignorePatterns := []string{
-		".git",
-		"node_modules",
-		"dist",
-		"build",
-		"__pycache__",
-		".next",
-		".nuxt",
-		"target", // Rust
-		"bin",    // Go
-		"obj",    // .NET
-		".vscode",
-		".idea",
-		"coverage",
-		".nyc_output",
-		".cache",
-	}
-
-	for _, pattern := range ignorePatterns {
-		if strings.HasPrefix(relPath, pattern+"/") || relPath == pattern {
-			return true
-		}
-	}
-
-	return false
+	// Delegate to new IgnoreManager for backward compatibility
+	return w.ignoreManager.ShouldIgnoreDirectory(path)
 }
 
-// shouldIgnoreFile checks if a file should be ignored
+// shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
 func (w *Watcher) shouldIgnoreFile(path string) bool {
-	filename := filepath.Base(path)
-	
-	// Ignore common temporary/swap files
-	ignorePatterns := []string{
-		".swp", ".swo", ".swn", // Vim
-		"~",                    // Backup files
-		".tmp", ".temp",        // Temporary files
-		".DS_Store",           // macOS
-		"Thumbs.db",           // Windows
-		".log",                // Log files
-	}
-
-	for _, pattern := range ignorePatterns {
-		if strings.HasSuffix(filename, pattern) {
-			return true
-		}
-	}
-
-	// Ignore files in timemachine_snapshots
-	if strings.Contains(path, "timemachine_snapshots") {
-		return true
-	}
-
-	return false
+	// Delegate to new IgnoreManager for backward compatibility
+	return w.ignoreManager.ShouldIgnoreFile(path)
 }
 
 // eventLoop processes file system events
@@ -196,6 +172,13 @@ func (w *Watcher) eventLoop() {
 
 // handleEvent processes a single file system event
 func (w *Watcher) handleEvent(event fsnotify.Event) {
+	// Check if this is a Git HEAD change (branch switch detection)
+	gitHeadPath := filepath.Join(w.state.GitDir, "HEAD")
+	if event.Name == gitHeadPath && (event.Op&fsnotify.Write == fsnotify.Write) {
+		w.handleBranchChange()
+		return // Branch changes don't trigger regular snapshots
+	}
+
 	// Ignore if file should be ignored
 	if w.shouldIgnoreFile(event.Name) {
 		return
@@ -204,7 +187,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	// If a new directory was created, add it to watch list
 	if event.Op&fsnotify.Create == fsnotify.Create {
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-			if !w.shouldIgnoreDirectory(event.Name) {
+			if !w.ignoreManager.ShouldIgnoreDirectory(event.Name) {
 				if err := w.addDirectoryRecursive(event.Name); err != nil {
 					fmt.Printf("Warning: couldn't watch new directory %s: %v\n", event.Name, err)
 				}
@@ -216,9 +199,61 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	w.debouncer.Trigger(w.createSnapshot)
 }
 
+// handleBranchChange processes Git branch changes (Phase 2: Real-time branch awareness)
+func (w *Watcher) handleBranchChange() {
+	// Use mutex to prevent race conditions during branch changes
+	w.branchMutex.Lock()
+	defer w.branchMutex.Unlock()
+
+	// Get current branch
+	currentBranch, err := w.gitManager.GetCurrentBranch()
+	if err != nil {
+		fmt.Printf("Warning: failed to get current branch after HEAD change: %v\n", err)
+		return
+	}
+
+	// Security enhancement: Validate branch name to prevent injection attacks
+	if !isValidBranchName(currentBranch) {
+		fmt.Printf("Warning: invalid branch name detected during HEAD change: %s\n", currentBranch)
+		return
+	}
+
+	// Check if branch actually changed
+	if currentBranch == w.lastBranch {
+		return // No change, ignore
+	}
+
+	// Log branch change (Phase 3C: Enhanced UX)
+	if w.lastBranch != "" {
+		color.Cyan("🌿 Branch changed: %s → %s", w.lastBranch, currentBranch)
+		fmt.Printf("   Creating shadow branch for %s and synchronizing state...\n", currentBranch)
+	} else {
+		color.Green("🌿 Initialized on branch: %s", currentBranch)
+	}
+
+	// Update tracking
+	w.lastBranch = currentBranch
+	w.state.CurrentBranch = currentBranch
+	w.state.BranchSynced = false
+
+	// Sync shadow repository to new branch
+	fmt.Print("🔄 Syncing shadow repository... ")
+	if err := w.state.EnsureBranchSync(); err != nil {
+		color.Red("❌ Failed to sync shadow branch: %v", err)
+		return
+	}
+	color.Green("✅ Done!")
+}
+
 // createSnapshot creates a snapshot (called after debounce delay)
 func (w *Watcher) createSnapshot() {
-	fmt.Print("📸 Creating snapshot... ")
+	// Get branch context for enhanced messaging (Phase 3C: Enhanced UX)
+	currentBranch, _, _, err := w.state.GetBranchContext()
+	if err != nil {
+		currentBranch = "unknown"
+	}
+	
+	fmt.Printf("📸 Creating snapshot on branch '%s'... ", currentBranch)
 	
 	if err := w.gitManager.CreateSnapshot(""); err != nil {
 		color.Red("❌ Error: %v", err)

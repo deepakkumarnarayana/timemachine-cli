@@ -4,18 +4,47 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 // GitManager wraps all Git operations for the shadow repository
 type GitManager struct {
 	State *AppState
+	// Security enhancement: Operation-level locking to prevent race conditions
+	operationMutex sync.Mutex
 }
 
 // NewGitManager creates a new GitManager with the given state
 func NewGitManager(state *AppState) *GitManager {
 	return &GitManager{State: state}
+}
+
+// isValidBranchName validates branch names according to Git naming rules
+// Security enhancement: Prevents command injection and malformed branch names
+func isValidBranchName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	
+	// Git branch name rules - only allow safe characters
+	matched, err := regexp.MatchString(`^[a-zA-Z0-9/_.-]+$`, name)
+	if err != nil || !matched {
+		return false
+	}
+	
+	// Additional Git branch name restrictions (based on git-check-ref-format)
+	return !strings.HasPrefix(name, ".") &&      // No leading dots
+		   !strings.HasSuffix(name, ".") &&      // No trailing dots  
+		   !strings.Contains(name, "..") &&      // No consecutive dots
+		   !strings.Contains(name, "//") &&      // No consecutive slashes
+		   !strings.HasPrefix(name, "/") &&      // No leading slash
+		   !strings.HasSuffix(name, "/") &&      // No trailing slash
+		   !strings.Contains(name, "@{") &&      // No @{ sequence
+		   !strings.HasSuffix(name, ".lock") &&  // No .lock suffix
+		   name != "HEAD" && name != "@"          // No reserved names
 }
 
 // RunCommand executes a git command with the shadow repo as the git directory
@@ -59,8 +88,29 @@ func (g *GitManager) InitializeShadowRepo() error {
 		return fmt.Errorf("failed to copy git config: %w", err)
 	}
 	
+	// Get current main branch to initialize shadow repo on the same branch
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	// Create initial commit and branch structure
+	if err := g.createInitialCommit(); err != nil {
+		return fmt.Errorf("failed to create initial commit: %w", err)
+	}
+	
+	// If we're not on main/master, create and switch to the current branch
+	if currentBranch != "main" && currentBranch != "master" {
+		if err := g.SwitchOrCreateShadowBranch(currentBranch); err != nil {
+			return fmt.Errorf("failed to create initial branch %s: %w", currentBranch, err)
+		}
+	}
+	
 	// Update state
 	g.State.IsInitialized = true
+	g.State.CurrentBranch = currentBranch
+	g.State.ShadowBranch = currentBranch
+	g.State.BranchSynced = true
 	
 	return nil
 }
@@ -94,6 +144,20 @@ func (g *GitManager) copyGitConfig() error {
 
 // CreateSnapshot creates a new snapshot in the shadow repository
 func (g *GitManager) CreateSnapshot(message string) error {
+	// Security enhancement: Operation-level locking to prevent race conditions
+	g.operationMutex.Lock()
+	defer g.operationMutex.Unlock()
+	
+	// Ensure we're on the correct shadow branch before creating snapshot
+	if err := g.State.EnsureBranchSync(); err != nil {
+		return fmt.Errorf("failed to sync shadow branch: %w", err)
+	}
+	
+	// Double-check branch state hasn't changed during operation
+	if err := g.State.EnsureValidBranchState(); err != nil {
+		return fmt.Errorf("branch state changed during operation: %w", err)
+	}
+	
 	// Stage everything including untracked files
 	_, err := g.RunCommand("add", "-A")
 	if err != nil {
@@ -111,10 +175,14 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		return nil
 	}
 	
-	// Use timestamp if no message provided
+	// Use timestamp and branch if no message provided
 	if message == "" {
 		now := time.Now()
-		message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
+		branchName := g.State.CurrentBranch
+		if branchName == "" {
+			branchName = "unknown"
+		}
+		message = fmt.Sprintf("Snapshot at %s [%s]", now.Format("15:04:05"), branchName)
 	}
 	
 	// Create the commit
@@ -188,6 +256,10 @@ func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, erro
 // NEVER use checkout or reset - they affect staging area
 // ALWAYS use git restore --source=<hash> --worktree
 func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
+	// Security enhancement: Operation-level locking to prevent race conditions
+	g.operationMutex.Lock()
+	defer g.operationMutex.Unlock()
+	
 	args := []string{"restore", "--source=" + hash, "--worktree"}
 	
 	if len(files) == 0 {
@@ -203,5 +275,87 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 	
+	return nil
+}
+
+// GetCurrentBranch returns the currently active branch in the main repository
+func (g *GitManager) GetCurrentBranch() (string, error) {
+	// Read from main repo's HEAD file to get current branch
+	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "branch", "--show-current")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		return "main", nil // Default to main if detached HEAD or empty
+	}
+	
+	return branch, nil
+}
+
+// GetCurrentShadowBranch returns the currently active branch in the shadow repository
+func (g *GitManager) GetCurrentShadowBranch() (string, error) {
+	output, err := g.RunCommand("branch", "--show-current")
+	if err != nil {
+		// If no branches exist yet, return default
+		if strings.Contains(err.Error(), "does not have any commits yet") {
+			return "main", nil
+		}
+		return "", fmt.Errorf("failed to get current shadow branch: %w", err)
+	}
+	
+	branch := strings.TrimSpace(output)
+	if branch == "" {
+		return "main", nil // Default to main if detached HEAD
+	}
+	
+	return branch, nil
+}
+
+// SwitchOrCreateShadowBranch switches to or creates a branch in the shadow repository
+func (g *GitManager) SwitchOrCreateShadowBranch(branchName string) error {
+	// Security enhancement: Validate branch name to prevent command injection
+	if !isValidBranchName(branchName) {
+		return fmt.Errorf("invalid branch name: %s (contains unsafe characters)", branchName)
+	}
+	
+	// First check if branch exists
+	_, err := g.RunCommand("rev-parse", "--verify", branchName)
+	if err != nil {
+		// Branch doesn't exist, create it
+		// Check if we have any commits first
+		_, err = g.RunCommand("rev-parse", "HEAD")
+		if err != nil {
+			// No commits yet, create initial commit
+			if err := g.createInitialCommit(); err != nil {
+				return fmt.Errorf("failed to create initial commit: %w", err)
+			}
+		}
+		
+		// Create and switch to new branch
+		_, err = g.RunCommand("checkout", "-b", branchName)
+		if err != nil {
+			return fmt.Errorf("failed to create branch %s: %w", branchName, err)
+		}
+	} else {
+		// Branch exists, switch to it
+		_, err = g.RunCommand("checkout", branchName)
+		if err != nil {
+			return fmt.Errorf("failed to switch to branch %s: %w", branchName, err)
+		}
+	}
+	
+	return nil
+}
+
+// createInitialCommit creates an empty initial commit if the shadow repo is empty
+func (g *GitManager) createInitialCommit() error {
+	// Create empty commit to establish repository history
+	_, err := g.RunCommand("commit", "--allow-empty", "-m", "Initial TimeMachine shadow repository commit")
+	if err != nil {
+		return fmt.Errorf("failed to create initial empty commit: %w", err)
+	}
 	return nil
 }
