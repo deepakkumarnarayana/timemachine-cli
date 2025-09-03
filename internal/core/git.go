@@ -59,8 +59,29 @@ func (g *GitManager) InitializeShadowRepo() error {
 		return fmt.Errorf("failed to copy git config: %w", err)
 	}
 	
+	// Get current main branch to initialize shadow repo on the same branch
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	// Create initial commit and branch structure
+	if err := g.createInitialCommit(); err != nil {
+		return fmt.Errorf("failed to create initial commit: %w", err)
+	}
+	
+	// If we're not on main/master, create and switch to the current branch
+	if currentBranch != "main" && currentBranch != "master" {
+		if err := g.SwitchOrCreateShadowBranch(currentBranch); err != nil {
+			return fmt.Errorf("failed to create initial branch %s: %w", currentBranch, err)
+		}
+	}
+	
 	// Update state
 	g.State.IsInitialized = true
+	g.State.CurrentBranch = currentBranch
+	g.State.ShadowBranch = currentBranch
+	g.State.BranchSynced = true
 	
 	return nil
 }
@@ -94,6 +115,11 @@ func (g *GitManager) copyGitConfig() error {
 
 // CreateSnapshot creates a new snapshot in the shadow repository
 func (g *GitManager) CreateSnapshot(message string) error {
+	// Ensure we're on the correct shadow branch before creating snapshot
+	if err := g.State.EnsureBranchSync(); err != nil {
+		return fmt.Errorf("failed to sync shadow branch: %w", err)
+	}
+	
 	// Stage everything including untracked files
 	_, err := g.RunCommand("add", "-A")
 	if err != nil {
@@ -111,10 +137,14 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		return nil
 	}
 	
-	// Use timestamp if no message provided
+	// Use timestamp and branch if no message provided
 	if message == "" {
 		now := time.Now()
-		message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
+		branchName := g.State.CurrentBranch
+		if branchName == "" {
+			branchName = "unknown"
+		}
+		message = fmt.Sprintf("Snapshot at %s [%s]", now.Format("15:04:05"), branchName)
 	}
 	
 	// Create the commit
@@ -203,5 +233,82 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 	
+	return nil
+}
+
+// GetCurrentBranch returns the currently active branch in the main repository
+func (g *GitManager) GetCurrentBranch() (string, error) {
+	// Read from main repo's HEAD file to get current branch
+	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "branch", "--show-current")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		return "main", nil // Default to main if detached HEAD or empty
+	}
+	
+	return branch, nil
+}
+
+// GetCurrentShadowBranch returns the currently active branch in the shadow repository
+func (g *GitManager) GetCurrentShadowBranch() (string, error) {
+	output, err := g.RunCommand("branch", "--show-current")
+	if err != nil {
+		// If no branches exist yet, return default
+		if strings.Contains(err.Error(), "does not have any commits yet") {
+			return "main", nil
+		}
+		return "", fmt.Errorf("failed to get current shadow branch: %w", err)
+	}
+	
+	branch := strings.TrimSpace(output)
+	if branch == "" {
+		return "main", nil // Default to main if detached HEAD
+	}
+	
+	return branch, nil
+}
+
+// SwitchOrCreateShadowBranch switches to or creates a branch in the shadow repository
+func (g *GitManager) SwitchOrCreateShadowBranch(branchName string) error {
+	// First check if branch exists
+	_, err := g.RunCommand("rev-parse", "--verify", branchName)
+	if err != nil {
+		// Branch doesn't exist, create it
+		// Check if we have any commits first
+		_, err = g.RunCommand("rev-parse", "HEAD")
+		if err != nil {
+			// No commits yet, create initial commit
+			if err := g.createInitialCommit(); err != nil {
+				return fmt.Errorf("failed to create initial commit: %w", err)
+			}
+		}
+		
+		// Create and switch to new branch
+		_, err = g.RunCommand("checkout", "-b", branchName)
+		if err != nil {
+			return fmt.Errorf("failed to create branch %s: %w", branchName, err)
+		}
+	} else {
+		// Branch exists, switch to it
+		_, err = g.RunCommand("checkout", branchName)
+		if err != nil {
+			return fmt.Errorf("failed to switch to branch %s: %w", branchName, err)
+		}
+	}
+	
+	return nil
+}
+
+// createInitialCommit creates an empty initial commit if the shadow repo is empty
+func (g *GitManager) createInitialCommit() error {
+	// Create empty commit to establish repository history
+	_, err := g.RunCommand("commit", "--allow-empty", "-m", "Initial TimeMachine shadow repository commit")
+	if err != nil {
+		return fmt.Errorf("failed to create initial empty commit: %w", err)
+	}
 	return nil
 }
