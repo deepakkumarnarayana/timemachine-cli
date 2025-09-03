@@ -40,6 +40,11 @@ func runShow(hash string) error {
 		return nil
 	}
 
+	// Phase 3B: Ensure valid branch state
+	if err := state.EnsureValidBranchState(); err != nil {
+		return fmt.Errorf("branch state validation failed: %w", err)
+	}
+
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
@@ -55,8 +60,14 @@ func runShow(hash string) error {
 		return fmt.Errorf("failed to show snapshot details: %w", err)
 	}
 
+	// Get current branch context for display
+	currentBranch, _, _, err := state.GetBranchContext()
+	if err != nil {
+		currentBranch = "unknown"
+	}
+
 	// Display the information with nice formatting
-	fmt.Printf("📸 Snapshot Details\n")
+	fmt.Printf("📸 Snapshot Details (branch: %s)\n", currentBranch)
 	fmt.Println()
 	
 	// Parse and format the git show output

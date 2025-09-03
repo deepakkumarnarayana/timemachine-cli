@@ -131,6 +131,11 @@ func runInspect(cmd *cobra.Command, args []string, showDiff, showStats bool, fil
 		return nil
 	}
 
+	// Phase 3B: Ensure valid branch state
+	if err := state.EnsureValidBranchState(); err != nil {
+		return fmt.Errorf("branch state validation failed: %w", err)
+	}
+
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
@@ -242,8 +247,15 @@ func showRepositoryStats(state *core.AppState) error {
 }
 
 func showSnapshotOverview(state *core.AppState, hash string) error {
+	// Get current branch context for display
+	currentBranch, _, _, err := state.GetBranchContext()
+	if err != nil {
+		currentBranch = "unknown"
+	}
+
 	color.Green("🔍 Snapshot Overview")
 	fmt.Printf("Hash: %s\n", hash)
+	fmt.Printf("Branch: %s\n", currentBranch)
 
 	// Get commit info
 	cmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "--work-tree="+state.ProjectRoot,

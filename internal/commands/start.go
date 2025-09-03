@@ -43,6 +43,26 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Phase 3B: Pre-flight branch state validation
+	fmt.Print("🔍 Validating branch state... ")
+	if err := state.EnsureValidBranchState(); err != nil {
+		color.Red("❌")
+		return fmt.Errorf("branch state validation failed: %w", err)
+	}
+	color.Green("✅")
+
+	// Display current branch context for user awareness
+	currentBranch, shadowBranch, synced, err := state.GetBranchContext()
+	if err != nil {
+		fmt.Printf("Warning: failed to get branch context: %v\n", err)
+	} else {
+		if synced {
+			color.Cyan("📋 Branch: %s (synchronized)", currentBranch)
+		} else {
+			color.Yellow("📋 Branch: %s → %s (synchronizing...)", currentBranch, shadowBranch)
+		}
+	}
+
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
