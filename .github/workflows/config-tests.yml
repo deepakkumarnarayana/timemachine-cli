@@ -360,6 +360,8 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [unit-tests, coverage-tests, security-tests, performance-tests, stress-tests, code-quality]
     if: always()
     
