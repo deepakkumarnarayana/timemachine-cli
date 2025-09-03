@@ -24,6 +24,7 @@ your codebase and creates snapshots without affecting your main Git workflow.
 🔧 QUICK START:
   timemachine init     # Initialize in your Git repository
   timemachine start    # Start watching for changes
+  timemachine snapshot # Create manual snapshot
   timemachine list     # View recent snapshots
   timemachine restore  # Rollback when needed
 
@@ -78,6 +79,7 @@ func init() {
 	rootCmd.AddCommand(commands.InitCmd())      // Setup
 	rootCmd.AddCommand(commands.ConfigCmd())    // Configuration  
 	rootCmd.AddCommand(commands.StartCmd())     // Core functionality
+	rootCmd.AddCommand(commands.SnapshotCmd())  // Manual snapshot creation
 	rootCmd.AddCommand(commands.ListCmd())      // Inspection
 	rootCmd.AddCommand(commands.ShowCmd())      // Inspection
 	rootCmd.AddCommand(commands.InspectCmd())   // Inspection
