@@ -41,6 +41,59 @@ func (g *GitManager) RunCommand(args ...string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// GetCurrentBranch returns the currently active branch in the main repository
+func (g *GitManager) GetCurrentBranch() (string, error) {
+	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "branch", "--show-current")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		return "main", nil // Default to main if detached HEAD or empty
+	}
+	
+	return branch, nil
+}
+
+// autoCommitOnBranchChange implements "soft isolation" by auto-committing
+// any pending changes when the user switches branches in the main repo
+func (g *GitManager) autoCommitOnBranchChange() error {
+	// Check if shadow repo has uncommitted changes
+	status, err := g.RunCommand("status", "--porcelain")
+	if err != nil {
+		// If status fails, assume repo is clean and continue
+		return nil
+	}
+	
+	// If output is empty, working tree is already clean
+	if strings.TrimSpace(status) == "" {
+		return nil
+	}
+	
+	// Get current branch from main repo for auto-commit context
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		currentBranch = "unknown"
+	}
+	
+	// Stage all changes
+	_, err = g.RunCommand("add", "-A")
+	if err != nil {
+		return fmt.Errorf("failed to stage changes for auto-commit: %w", err)
+	}
+	
+	// Auto-commit with descriptive message
+	autoMessage := fmt.Sprintf("[%s] Auto-sync: Working tree state", currentBranch)
+	_, err = g.RunCommand("commit", "-m", autoMessage)
+	if err != nil {
+		return fmt.Errorf("failed to auto-commit changes: %w", err)
+	}
+	
+	return nil
+}
+
 // InitializeShadowRepo creates and initializes the shadow repository
 func (g *GitManager) InitializeShadowRepo() error {
 	// Create .git/timemachine_snapshots directory
@@ -57,6 +110,11 @@ func (g *GitManager) InitializeShadowRepo() error {
 	// Copy user.name and user.email from main repo
 	if err := g.copyGitConfig(); err != nil {
 		return fmt.Errorf("failed to copy git config: %w", err)
+	}
+	
+	// Create initial empty commit to establish repository history
+	if err := g.createInitialCommit(); err != nil {
+		return fmt.Errorf("failed to create initial commit: %w", err)
 	}
 	
 	// Update state
@@ -93,6 +151,7 @@ func (g *GitManager) copyGitConfig() error {
 }
 
 // CreateSnapshot creates a new snapshot in the shadow repository
+// Single-branch approach: All snapshots go to main branch with branch context in message
 func (g *GitManager) CreateSnapshot(message string) error {
 	// Stage everything including untracked files
 	_, err := g.RunCommand("add", "-A")
@@ -111,14 +170,23 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		return nil
 	}
 	
-	// Use timestamp if no message provided
+	// Get current branch from main repo for context
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	// Enhance commit message with branch context and timestamp
 	if message == "" {
 		now := time.Now()
 		message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
 	}
 	
+	// Format: [branch] message
+	enhancedMessage := fmt.Sprintf("[%s] %s", currentBranch, message)
+	
 	// Create the commit
-	_, err = g.RunCommand("commit", "-m", message)
+	_, err = g.RunCommand("commit", "-m", enhancedMessage)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot: %w", err)
 	}
@@ -201,6 +269,22 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 	_, err := g.RunCommand(args...)
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
+	}
+	
+	return nil
+}
+
+// createInitialCommit creates an empty initial commit if the shadow repo is empty
+func (g *GitManager) createInitialCommit() error {
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		currentBranch = "main"
+	}
+	
+	message := fmt.Sprintf("[%s] Initial TimeMachine shadow repository", currentBranch)
+	_, err = g.RunCommand("commit", "--allow-empty", "-m", message)
+	if err != nil {
+		return fmt.Errorf("failed to create initial empty commit: %w", err)
 	}
 	
 	return nil

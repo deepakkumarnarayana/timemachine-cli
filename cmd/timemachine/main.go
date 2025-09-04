@@ -78,6 +78,7 @@ func init() {
 	rootCmd.AddCommand(commands.InitCmd())      // Setup
 	rootCmd.AddCommand(commands.ConfigCmd())    // Configuration  
 	rootCmd.AddCommand(commands.StartCmd())     // Core functionality
+	rootCmd.AddCommand(commands.SnapshotCmd())  // Manual snapshots
 	rootCmd.AddCommand(commands.ListCmd())      // Inspection
 	rootCmd.AddCommand(commands.ShowCmd())      // Inspection
 	rootCmd.AddCommand(commands.InspectCmd())   // Inspection
