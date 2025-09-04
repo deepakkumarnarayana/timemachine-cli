@@ -30,7 +30,7 @@ func isValidBranchName(name string) bool {
 	}
 	
 	// Git branch name rules - only allow safe characters
-	matched, err := regexp.MatchString(`^[a-zA-Z0-9/_.-]+$`, name)
+	matched, err := regexp.MatchString(`^[a-zA-Z0-9/_.-]+`, name)
 	if err != nil || !matched {
 		return false
 	}
@@ -147,6 +147,11 @@ func (g *GitManager) CreateSnapshot(message string) error {
 	// Security enhancement: Operation-level locking to prevent race conditions
 	g.operationMutex.Lock()
 	defer g.operationMutex.Unlock()
+
+
+	if err := g.SyncBranch(); err != nil {
+		return fmt.Errorf("failed to sync branch: %w", err)
+	}
 	
 	// Ensure we're on the correct shadow branch before creating snapshot
 	if err := g.State.EnsureBranchSync(); err != nil {
@@ -205,6 +210,11 @@ type Snapshot struct {
 
 // ListSnapshots returns a list of snapshots, optionally filtered by file
 func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, error) {
+
+	if err := g.SyncBranch(); err != nil {
+		return nil, fmt.Errorf("failed to sync branch: %w", err)
+	}
+
 	// Build git log command
 	args := []string{"log", "--oneline", "--date=relative"}
 	
@@ -261,6 +271,10 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 	// Security enhancement: Operation-level locking to prevent race conditions
 	g.operationMutex.Lock()
 	defer g.operationMutex.Unlock()
+
+	if err := g.SyncBranch(); err != nil {
+		return fmt.Errorf("failed to sync branch: %w", err)
+	}
 	
 	args := []string{"restore", "--source=" + hash, "--worktree"}
 	
@@ -359,5 +373,71 @@ func (g *GitManager) createInitialCommit() error {
 	if err != nil {
 		return fmt.Errorf("failed to create initial empty commit: %w", err)
 	}
+	return nil
+}
+
+// EnsureCleanWorkingTree automatically commits any uncommitted changes in shadow repo
+// This solves Issue 1: Branch switching conflicts by auto-syncing before operations
+func (g *GitManager) EnsureCleanWorkingTree() error {
+	g.operationMutex.Lock()
+	defer g.operationMutex.Unlock()
+	
+	// Check if shadow repo has uncommitted changes
+	output, err := g.RunCommand("status", "--porcelain")
+	if err != nil {
+		// If status fails, assume repo is clean and continue
+		return nil
+	}
+	
+	// If output is empty, working tree is already clean
+	if strings.TrimSpace(output) == "" {
+		return nil
+	}
+	
+	// Get current Git branch for commit message
+	currentGitBranch := "unknown"
+	if cmd := exec.Command("git", "branch", "--show-current"); cmd != nil {
+		if branchOutput, err := cmd.Output(); err == nil {
+			currentGitBranch = strings.TrimSpace(string(branchOutput))
+		}
+	}
+	
+	// Auto-commit uncommitted changes
+	if _, err := g.RunCommand("add", "-A"); err != nil {
+		return fmt.Errorf("failed to stage changes for auto-sync: %w", err)
+	}
+	
+	message := fmt.Sprintf("Auto-sync: Working tree state from Git branch '%s'", currentGitBranch)
+	if _, err := g.RunCommand("commit", "-m", message); err != nil {
+		return fmt.Errorf("failed to auto-commit changes: %w", err)
+	}
+	
+	return nil
+}
+
+// SyncBranch ensures the shadow repository is on the same branch as the main repo
+func (g *GitManager) SyncBranch() error {
+	// Get current branch from the main repository
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	// Get current branch from the shadow repository
+	shadowBranch, err := g.GetCurrentShadowBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current shadow branch: %w", err)
+	}
+
+	// If they're already the same, nothing to do
+	if currentBranch == shadowBranch {
+		return nil
+	}
+
+	// Switch to or create the branch in the shadow repository
+	if err := g.SwitchOrCreateShadowBranch(currentBranch); err != nil {
+		return fmt.Errorf("failed to switch or create shadow branch %s: %w", currentBranch, err)
+	}
+
 	return nil
 }

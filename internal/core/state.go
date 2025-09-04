@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -47,8 +48,8 @@ func NewAppState() (*AppState, error) {
 	// Set ProjectRoot to parent of .git
 	projectRoot := filepath.Dir(gitDir)
 	
-	// Set ShadowRepoDir to .git/timemachine_snapshots
-	shadowRepoDir := filepath.Join(gitDir, "timemachine_snapshots")
+	// Set ShadowRepoDir to .git/timemachine_<hash> for per-worktree isolation
+	shadowRepoDir := calculateShadowRepoDir(gitDir, cwd)
 	
 	// Check if shadow repo exists by looking for HEAD file
 	headFile := filepath.Join(shadowRepoDir, "HEAD")
@@ -266,6 +267,21 @@ func (s *AppState) ForceResetBranchState() {
 	s.CurrentBranch = ""
 	s.ShadowBranch = ""
 	s.branchCacheTime = time.Time{} // Invalidate cache
+}
+
+// calculateShadowRepoDir generates a unique shadow repository path for each worktree
+// This solves Issue 2: Multiple worktree conflicts by creating isolated shadow repos
+func calculateShadowRepoDir(gitDir, workingDir string) string {
+	// Create hash of working directory to ensure uniqueness per worktree
+	hash := sha256.Sum256([]byte(workingDir))
+	
+	// Use first 8 characters of hex hash for readability
+	hashStr := fmt.Sprintf("%x", hash[:4])
+	
+	// Create shadow repo directory name: timemachine_<hash>
+	shadowRepoName := fmt.Sprintf("timemachine_%s", hashStr)
+	
+	return filepath.Join(gitDir, shadowRepoName)
 }
 
 // findGitDir searches for a .git directory starting from the given directory

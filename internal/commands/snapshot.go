@@ -64,6 +64,12 @@ func runSnapshot(message string) error {
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
+	// Auto-sync working tree before creating snapshot (solves Issue 1: Branch conflicts)
+	if err := gitManager.EnsureCleanWorkingTree(); err != nil {
+		color.Yellow("⚠️  Warning: Auto-sync failed: %v", err)
+		fmt.Println("   Continuing with snapshot creation. Some branch operations may conflict.")
+	}
+
 	// Create the snapshot
 	fmt.Printf("📸 Creating manual snapshot on branch '%s'... ", currentBranch)
 	
