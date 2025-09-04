@@ -10,6 +10,8 @@ import (
 
 // SnapshotCmd creates the snapshot command for manual snapshot creation
 func SnapshotCmd() *cobra.Command {
+	var messageFlag string
+
 	cmd := &cobra.Command{
 		Use:   "snapshot [message]",
 		Short: "Create a manual snapshot of the current working directory",
@@ -19,19 +21,28 @@ This command captures the current state of all files and creates a snapshot
 in the shadow repository with the specified message. If no message is provided,
 a timestamp-based message will be generated.
 
+You can provide the message in two ways:
+- As a positional argument: timemachine snapshot "message"
+- Using the -m flag: timemachine snapshot -m "message"
+
 Examples:
   timemachine snapshot "Fixed login bug"
-  timemachine snapshot "Added validation logic"
+  timemachine snapshot -m "Added validation logic" 
   timemachine snapshot   # Uses timestamp-based message`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			message := ""
+			message := messageFlag
+			
+			// Positional argument takes precedence over flag
 			if len(args) > 0 {
 				message = args[0]
 			}
+			
 			return runSnapshot(message)
 		},
 	}
+
+	cmd.Flags().StringVarP(&messageFlag, "message", "m", "", "Snapshot message (alternative to positional argument)")
 
 	return cmd
 }
