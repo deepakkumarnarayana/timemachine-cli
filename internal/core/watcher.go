@@ -58,7 +58,7 @@ func (w *Watcher) Start() error {
 
 	// Create initial snapshot
 	fmt.Print("✅ Creating initial snapshot... ")
-	if err := w.gitManager.CreateSnapshot(""); err != nil {
+	if err := w.gitManager.CreateWatcherSnapshot(); err != nil {
 		color.Red("❌")
 		return fmt.Errorf("failed to create initial snapshot: %w", err)
 	}
@@ -173,7 +173,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 func (w *Watcher) createSnapshot() {
 	fmt.Print("📸 Creating snapshot... ")
 	
-	if err := w.gitManager.CreateSnapshot(""); err != nil {
+	if err := w.gitManager.CreateWatcherSnapshot(); err != nil {
 		color.Red("❌ Error: %v", err)
 		return
 	}

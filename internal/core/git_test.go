@@ -172,8 +172,15 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 		t.Errorf("Expected 1 snapshot, got %d", len(snapshots))
 	}
 
-	if snapshots[0].Message != "Test snapshot" {
-		t.Errorf("Expected message 'Test snapshot', got '%s'", snapshots[0].Message)
+	// Check that message includes branch context and our text
+	expectedContent := "Test snapshot"
+	if !strings.Contains(snapshots[0].Message, expectedContent) {
+		t.Errorf("Expected message to contain '%s', got '%s'", expectedContent, snapshots[0].Message)
+	}
+	
+	// Verify branch-aware format [branch] message
+	if !strings.HasPrefix(snapshots[0].Message, "[") {
+		t.Errorf("Expected branch-aware message format [branch] message, got '%s'", snapshots[0].Message)
 	}
 
 	// Test creating snapshot with auto-generated message
@@ -211,8 +218,9 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list snapshots from empty repo: %v", err)
 	}
-	if len(snapshots) != 0 {
-		t.Errorf("Expected 0 snapshots from empty repo, got %d", len(snapshots))
+	// Shadow repo starts with initial empty commit, so expect 1 not 0
+	if len(snapshots) != 1 {
+		t.Errorf("Expected 1 initial snapshot from shadow repo, got %d", len(snapshots))
 	}
 
 	// Create test files and snapshots
@@ -240,8 +248,9 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list all snapshots: %v", err)
 	}
-	if len(snapshots) != 3 {
-		t.Errorf("Expected 3 snapshots, got %d", len(snapshots))
+	// Expect 4 total: 1 initial + 3 test snapshots
+	if len(snapshots) != 4 {
+		t.Errorf("Expected 4 snapshots (1 initial + 3 test), got %d", len(snapshots))
 	}
 
 	// Test limit
