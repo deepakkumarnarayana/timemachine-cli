@@ -133,7 +133,7 @@ git status  # Should not show timemachine changes
 ```
 
 ## Dependencies
-
+dk test
 - **fsnotify**: File system event monitoring
 - **cobra**: CLI framework and command structure
 - **color**: Terminal output coloring
