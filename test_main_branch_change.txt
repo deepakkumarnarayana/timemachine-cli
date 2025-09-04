@@ -1,0 +1,2 @@
+This file created on main branch to test the old architecture.
+This will demonstrate the sync conflict issue that our new architecture solves.

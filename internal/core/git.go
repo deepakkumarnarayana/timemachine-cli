@@ -416,6 +416,7 @@ func (g *GitManager) EnsureCleanWorkingTree() error {
 }
 
 // SyncBranch ensures the shadow repository is on the same branch as the main repo
+// Includes automatic cleanup of uncommitted changes to prevent branch switch conflicts
 func (g *GitManager) SyncBranch() error {
 	// Get current branch from the main repository
 	currentBranch, err := g.GetCurrentBranch()
@@ -432,6 +433,14 @@ func (g *GitManager) SyncBranch() error {
 	// If they're already the same, nothing to do
 	if currentBranch == shadowBranch {
 		return nil
+	}
+
+	// Auto-sync any uncommitted changes before branch switch
+	// This prevents "Your local changes would be overwritten" errors
+	if err := g.EnsureCleanWorkingTree(); err != nil {
+		// Log warning but continue - graceful degradation
+		fmt.Printf("Warning: Auto-sync failed: %v\n", err)
+		fmt.Println("   Continuing with branch sync. Some operations may conflict.")
 	}
 
 	// Switch to or create the branch in the shadow repository
