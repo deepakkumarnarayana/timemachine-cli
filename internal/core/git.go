@@ -10,12 +10,27 @@ import (
 
 // GitManager wraps all Git operations for the shadow repository
 type GitManager struct {
-	State *AppState
+	State          *AppState
+	currentBranch  string // Current main repo branch
+	previousBranch string // Previous branch (for branch change detection)
+	branchChanged  bool   // Flag indicating first commit after branch change
 }
 
 // NewGitManager creates a new GitManager with the given state
 func NewGitManager(state *AppState) *GitManager {
-	return &GitManager{State: state}
+	manager := &GitManager{State: state}
+	// Initialize branch state on creation
+	manager.initializeBranchState()
+	return manager
+}
+
+// initializeBranchState sets up initial branch tracking
+func (g *GitManager) initializeBranchState() {
+	if branch, err := g.GetCurrentBranch(); err == nil {
+		g.currentBranch = branch
+		g.previousBranch = branch
+		g.branchChanged = false
+	}
 }
 
 // RunCommand executes a git command with the shadow repo as the git directory
@@ -57,38 +72,124 @@ func (g *GitManager) GetCurrentBranch() (string, error) {
 	return branch, nil
 }
 
-// autoCommitOnBranchChange implements "soft isolation" by auto-committing
-// any pending changes when the user switches branches in the main repo
-func (g *GitManager) autoCommitOnBranchChange() error {
-	// Check if shadow repo has uncommitted changes
+// updateBranchState detects and tracks branch changes in main repository
+func (g *GitManager) updateBranchState() error {
+	newBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return err
+	}
+	
+	// Detect branch change
+	if g.currentBranch != "" && g.currentBranch != newBranch {
+		g.previousBranch = g.currentBranch
+		g.branchChanged = true
+	}
+	
+	g.currentBranch = newBranch
+	return nil
+}
+
+// countUncommittedFiles counts files that would be included in next commit
+func (g *GitManager) countUncommittedFiles() (int, error) {
 	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
-		// If status fails, assume repo is clean and continue
-		return nil
+		return 0, err
 	}
 	
-	// If output is empty, working tree is already clean
 	if strings.TrimSpace(status) == "" {
-		return nil
+		return 0, nil
 	}
 	
-	// Get current branch from main repo for auto-commit context
-	currentBranch, err := g.GetCurrentBranch()
+	lines := strings.Split(strings.TrimSpace(status), "\n")
+	return len(lines), nil
+}
+
+// addCommitMetadata adds structured metadata to commit using git notes
+func (g *GitManager) addCommitMetadata(commitHash string, changeCount int, commitType string) error {
+	metadata := fmt.Sprintf(`{
+  "branch": "%s",
+  "previousBranch": "%s",
+  "changeCount": %d,
+  "branchSwitch": %t,
+  "timestamp": "%s",
+  "type": "%s"
+}`, g.currentBranch, g.previousBranch, changeCount, g.branchChanged, time.Now().Format(time.RFC3339), commitType)
+	
+	_, err := g.RunCommand("notes", "add", "-m", metadata, commitHash)
 	if err != nil {
-		currentBranch = "unknown"
+		// Don't fail commit if notes fail - metadata is optional
+		fmt.Printf("Warning: failed to add commit metadata: %v\n", err)
+	}
+	return nil
+}
+
+// CreateWatcherSnapshot creates a snapshot specifically from file watcher
+// Used when watcher detects branch changes and needs to auto-commit
+func (g *GitManager) CreateWatcherSnapshot() error {
+	// Update branch state first
+	if err := g.updateBranchState(); err != nil {
+		return fmt.Errorf("failed to update branch state: %w", err)
+	}
+	
+	// Check if there are changes to commit
+	status, err := g.RunCommand("status", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("failed to check status: %w", err)
+	}
+	
+	if strings.TrimSpace(status) == "" {
+		return nil // No changes to commit
 	}
 	
 	// Stage all changes
 	_, err = g.RunCommand("add", "-A")
 	if err != nil {
-		return fmt.Errorf("failed to stage changes for auto-commit: %w", err)
+		return fmt.Errorf("failed to stage changes: %w", err)
 	}
 	
-	// Auto-commit with descriptive message
-	autoMessage := fmt.Sprintf("[%s] Auto-sync: Working tree state", currentBranch)
-	_, err = g.RunCommand("commit", "-m", autoMessage)
+	// Count changes
+	changeCount, err := g.countUncommittedFiles()
 	if err != nil {
-		return fmt.Errorf("failed to auto-commit changes: %w", err)
+		changeCount = 0
+	}
+	
+	var message string
+	var commitType string
+	
+	if g.branchChanged {
+		// Watcher detected branch change
+		if changeCount > 20 {
+			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)", 
+				g.previousBranch, g.currentBranch, changeCount)
+		} else {
+			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)", 
+				g.previousBranch, g.currentBranch, changeCount)
+		}
+		commitType = "watcher-branch-switch"
+		g.branchChanged = false
+	} else {
+		// Regular watcher snapshot
+		message = fmt.Sprintf("[%s] Auto-snapshot from file watcher", g.currentBranch)
+		commitType = "watcher-auto"
+	}
+	
+	// Create commit
+	output, err := g.RunCommand("commit", "-m", message)
+	if err != nil {
+		return fmt.Errorf("failed to create watcher snapshot: %w", err)
+	}
+	
+	// Add metadata
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) > 0 {
+		commitInfo := lines[0]
+		if strings.Contains(commitInfo, "[") {
+			parts := strings.Fields(commitInfo)
+			if len(parts) >= 2 {
+				commitHash := strings.Trim(parts[1], "[]")
+				g.addCommitMetadata(commitHash, changeCount, commitType)
+			}
+		}
 	}
 	
 	return nil
@@ -150,9 +251,14 @@ func (g *GitManager) copyGitConfig() error {
 	return nil
 }
 
-// CreateSnapshot creates a new snapshot in the shadow repository
-// Single-branch approach: All snapshots go to main branch with branch context in message
+// CreateSnapshot creates a new snapshot with branch-aware intelligence
+// Detects branch changes and creates contextual commit messages with warnings
 func (g *GitManager) CreateSnapshot(message string) error {
+	// Update branch state and detect changes
+	if err := g.updateBranchState(); err != nil {
+		return fmt.Errorf("failed to update branch state: %w", err)
+	}
+	
 	// Stage everything including untracked files
 	_, err := g.RunCommand("add", "-A")
 	if err != nil {
@@ -170,25 +276,58 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		return nil
 	}
 	
-	// Get current branch from main repo for context
-	currentBranch, err := g.GetCurrentBranch()
+	// Count files being committed
+	changeCount, err := g.countUncommittedFiles()
 	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
+		changeCount = 0 // Continue even if count fails
 	}
 	
-	// Enhance commit message with branch context and timestamp
-	if message == "" {
-		now := time.Now()
-		message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
-	}
+	// Create smart commit message based on branch state
+	var enhancedMessage string
+	var commitType string
 	
-	// Format: [branch] message
-	enhancedMessage := fmt.Sprintf("[%s] %s", currentBranch, message)
+	if g.branchChanged {
+		// First commit after branch change - add warnings for large changes
+		if changeCount > 20 {
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)", 
+				g.previousBranch, g.currentBranch, message, changeCount)
+		} else if changeCount > 5 {
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)", 
+				g.previousBranch, g.currentBranch, message, changeCount)
+		} else {
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s", 
+				g.previousBranch, g.currentBranch, message)
+		}
+		commitType = "branch-switch"
+		g.branchChanged = false // Reset flag after first commit
+	} else {
+		// Normal commit on same branch
+		if message == "" {
+			now := time.Now()
+			message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
+		}
+		enhancedMessage = fmt.Sprintf("[%s] %s", g.currentBranch, message)
+		commitType = "manual"
+	}
 	
 	// Create the commit
-	_, err = g.RunCommand("commit", "-m", enhancedMessage)
+	output, err := g.RunCommand("commit", "-m", enhancedMessage)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot: %w", err)
+	}
+	
+	// Extract commit hash from output (format: "[branch hash] message")
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	commitInfo := lines[0] // First line contains commit info
+	
+	// Add metadata for filtering and analysis
+	if strings.Contains(commitInfo, "[") {
+		// Try to extract hash from git commit output
+		parts := strings.Fields(commitInfo)
+		if len(parts) >= 2 {
+			commitHash := strings.Trim(parts[1], "[]")
+			g.addCommitMetadata(commitHash, changeCount, commitType)
+		}
 	}
 	
 	return nil
@@ -250,6 +389,62 @@ func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, erro
 	}
 	
 	return snapshots, nil
+}
+
+// ListSnapshotsByBranch returns snapshots filtered by branch name
+func (g *GitManager) ListSnapshotsByBranch(branchName string, limit int) ([]Snapshot, error) {
+	// Get all snapshots first
+	snapshots, err := g.ListSnapshots(0, "") // Get all snapshots
+	if err != nil {
+		return nil, err
+	}
+	
+	// Filter by branch name in commit message
+	var filtered []Snapshot
+	branchPattern := fmt.Sprintf("[%s]", branchName)
+	switchPattern := fmt.Sprintf("→%s]", branchName) // Also catch branch switches TO this branch
+	
+	for _, snapshot := range snapshots {
+		if strings.Contains(snapshot.Message, branchPattern) || strings.Contains(snapshot.Message, switchPattern) {
+			filtered = append(filtered, snapshot)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
+		}
+	}
+	
+	return filtered, nil
+}
+
+// GetSnapshotMetadata retrieves metadata for a snapshot using git notes
+func (g *GitManager) GetSnapshotMetadata(hash string) (string, error) {
+	output, err := g.RunCommand("notes", "show", hash)
+	if err != nil {
+		// Notes don't exist for this commit
+		return "", nil
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// ListBranchSwitches returns all commits that represent branch switches
+func (g *GitManager) ListBranchSwitches(limit int) ([]Snapshot, error) {
+	snapshots, err := g.ListSnapshots(0, "")
+	if err != nil {
+		return nil, err
+	}
+	
+	var switches []Snapshot
+	for _, snapshot := range snapshots {
+		// Look for branch switch indicators in commit message
+		if strings.Contains(snapshot.Message, "→") && strings.Contains(snapshot.Message, "BRANCH SWITCH") {
+			switches = append(switches, snapshot)
+			if limit > 0 && len(switches) >= limit {
+				break
+			}
+		}
+	}
+	
+	return switches, nil
 }
 
 // RestoreSnapshot restores files from a specific snapshot
