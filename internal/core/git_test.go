@@ -72,9 +72,9 @@ func TestGitManager_RunCommand(t *testing.T) {
 	}
 }
 
-func TestGitManager_InitializeShadowRepo(t *testing.T) {
+func TestGitManager_SetupShadowRepo(t *testing.T) {
 	// Create test environment
-	tempDir, err := os.MkdirTemp("", "timemachine-init-test")
+	tempDir, err := os.MkdirTemp("", "timemachine-setup-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -110,10 +110,10 @@ func TestGitManager_InitializeShadowRepo(t *testing.T) {
 
 	gitManager := NewGitManager(state)
 
-	// Test initialization
-	err = gitManager.InitializeShadowRepo()
+	// Test setup (without commits)
+	err = gitManager.SetupShadowRepo()
 	if err != nil {
-		t.Fatalf("Failed to initialize shadow repo: %v", err)
+		t.Fatalf("Failed to setup shadow repo: %v", err)
 	}
 
 	// Verify shadow repo directory exists
@@ -142,6 +142,15 @@ func TestGitManager_InitializeShadowRepo(t *testing.T) {
 	}
 	if email != "test@example.com" {
 		t.Errorf("Expected user.email 'test@example.com', got '%s'", email)
+	}
+
+	// Verify no commits were created (this is the key difference from InitializeShadowRepo)
+	commits, err := gitManager.ListSnapshots(0, "")
+	if err != nil {
+		t.Errorf("Failed to list snapshots: %v", err)
+	}
+	if len(commits) != 0 {
+		t.Errorf("Expected no commits from SetupShadowRepo, got %d commits", len(commits))
 	}
 }
 
@@ -218,9 +227,9 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list snapshots from empty repo: %v", err)
 	}
-	// Shadow repo starts with initial empty commit, so expect 1 not 0
-	if len(snapshots) != 1 {
-		t.Errorf("Expected 1 initial snapshot from shadow repo, got %d", len(snapshots))
+	// Shadow repo setup creates no commits, so expect 0
+	if len(snapshots) != 0 {
+		t.Errorf("Expected 0 snapshots from empty shadow repo, got %d", len(snapshots))
 	}
 
 	// Create test files and snapshots
@@ -248,9 +257,9 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list all snapshots: %v", err)
 	}
-	// Expect 4 total: 1 initial + 3 test snapshots
-	if len(snapshots) != 4 {
-		t.Errorf("Expected 4 snapshots (1 initial + 3 test), got %d", len(snapshots))
+	// Expect 3 total: just the 3 test snapshots (no initial empty commit)
+	if len(snapshots) != 3 {
+		t.Errorf("Expected 3 snapshots (test snapshots only), got %d", len(snapshots))
 	}
 
 	// Test limit
@@ -405,9 +414,9 @@ func setupTestRepo(t *testing.T) (string, *AppState, *GitManager) {
 
 	gitManager := NewGitManager(state)
 
-	// Initialize shadow repo
-	if err := gitManager.InitializeShadowRepo(); err != nil {
-		t.Fatalf("Failed to initialize shadow repo: %v", err)
+	// Setup shadow repo (without commits)
+	if err := gitManager.SetupShadowRepo(); err != nil {
+		t.Fatalf("Failed to setup shadow repo: %v", err)
 	}
 
 	return tempDir, state, gitManager

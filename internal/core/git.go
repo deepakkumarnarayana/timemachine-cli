@@ -209,7 +209,7 @@ func (g *GitManager) InitializeShadowRepo() error {
 	}
 	
 	// Copy user.name and user.email from main repo
-	if err := g.copyGitConfig(); err != nil {
+	if err := g.CopyGitConfig(); err != nil {
 		return fmt.Errorf("failed to copy git config: %w", err)
 	}
 	
@@ -224,8 +224,34 @@ func (g *GitManager) InitializeShadowRepo() error {
 	return nil
 }
 
-// copyGitConfig copies user.name and user.email from the main repo to shadow repo
-func (g *GitManager) copyGitConfig() error {
+// SetupShadowRepo creates and initializes the shadow repository without any commits
+// Use this + CreateSnapshot() instead of InitializeShadowRepo() to avoid redundant empty commits
+func (g *GitManager) SetupShadowRepo() error {
+	// Create .git/timemachine_snapshots directory
+	if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil {
+		return fmt.Errorf("failed to create shadow repo directory: %w", err)
+	}
+	
+	// Initialize the shadow repo
+	_, err := g.RunCommand("init")
+	if err != nil {
+		return fmt.Errorf("failed to initialize shadow repository: %w", err)
+	}
+	
+	// Copy user.name and user.email from main repo
+	if err := g.CopyGitConfig(); err != nil {
+		return fmt.Errorf("failed to copy git config: %w", err)
+	}
+	
+	// DO NOT create any commits - let CreateSnapshot() handle that
+	// Update state
+	g.State.IsInitialized = true
+	
+	return nil
+}
+
+// CopyGitConfig copies user.name and user.email from the main repo to shadow repo
+func (g *GitManager) CopyGitConfig() error {
 	// Get user.name from main repo
 	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "config", "user.name")
 	nameOutput, err := cmd.Output()

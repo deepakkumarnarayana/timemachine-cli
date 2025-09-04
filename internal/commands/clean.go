@@ -322,10 +322,15 @@ func cleanAndRecreateRepository(gitManager *core.GitManager) error {
 		return fmt.Errorf("failed to remove shadow repository: %w", err)
 	}
 	
-	// Recreate it fresh with initial commit
-	err = gitManager.InitializeShadowRepo()
+	// Setup shadow repository (without commits)
+	if err := gitManager.SetupShadowRepo(); err != nil {
+		return fmt.Errorf("failed to setup shadow repository: %w", err)
+	}
+	
+	// Create initial snapshot with current files (like init command does)
+	err = gitManager.CreateSnapshot("Initial Time Machine snapshot after clean")
 	if err != nil {
-		return fmt.Errorf("failed to recreate shadow repository: %w", err)
+		return fmt.Errorf("failed to create initial snapshot: %w", err)
 	}
 	
 	return nil

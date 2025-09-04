@@ -47,11 +47,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
-	// Step 1: Create shadow repository
-	fmt.Print("  Creating shadow repository... ")
-	if err := gitManager.InitializeShadowRepo(); err != nil {
+	// Step 1: Setup shadow repository (without commits)
+	fmt.Print("  Setting up shadow repository... ")
+	if err := gitManager.SetupShadowRepo(); err != nil {
 		color.Red("❌")
-		return fmt.Errorf("failed to create shadow repository: %w", err)
+		return fmt.Errorf("failed to setup shadow repository: %w", err)
 	}
 	color.Green("✅")
 
