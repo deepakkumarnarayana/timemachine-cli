@@ -469,17 +469,37 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 	return nil
 }
 
-// createInitialCommit creates an empty initial commit if the shadow repo is empty
+// createInitialCommit creates an initial commit with current project state
 func (g *GitManager) createInitialCommit() error {
+	// Stage all current files
+	_, err := g.RunCommand("add", "-A")
+	if err != nil {
+		return fmt.Errorf("failed to stage files for initial commit: %w", err)
+	}
+	
 	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		currentBranch = "main"
 	}
 	
 	message := fmt.Sprintf("[%s] Initial TimeMachine shadow repository", currentBranch)
-	_, err = g.RunCommand("commit", "--allow-empty", "-m", message)
+	
+	// Check if there are files to commit
+	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
-		return fmt.Errorf("failed to create initial empty commit: %w", err)
+		return fmt.Errorf("failed to check status for initial commit: %w", err)
+	}
+	
+	if strings.TrimSpace(status) == "" {
+		// No files to commit, create empty commit
+		_, err = g.RunCommand("commit", "--allow-empty", "-m", message)
+	} else {
+		// Files exist, create normal commit
+		_, err = g.RunCommand("commit", "-m", message)
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to create initial commit: %w", err)
 	}
 	
 	return nil
