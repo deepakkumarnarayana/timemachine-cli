@@ -85,6 +85,39 @@ func (g *GitManager) GetCurrentBranch() (string, error) {
 	return branch, nil
 }
 
+// getLastCommitBranch extracts the branch name from the last commit message
+func (g *GitManager) getLastCommitBranch() string {
+	// Get the last commit message
+	output, err := g.RunCommand("log", "-1", "--format=%s")
+	if err != nil {
+		return "" // No commits yet or error
+	}
+	
+	message := strings.TrimSpace(output)
+	if message == "" {
+		return ""
+	}
+	
+	// Extract branch from format [branch-name] or [prev→curr]
+	if strings.HasPrefix(message, "[") {
+		endBracket := strings.Index(message, "]")
+		if endBracket > 1 {
+			branchPart := message[1:endBracket]
+			// Handle branch switch format [prev→curr]
+			if strings.Contains(branchPart, "→") {
+				parts := strings.Split(branchPart, "→")
+				if len(parts) >= 2 {
+					return strings.TrimSpace(parts[1]) // Return current branch from switch
+				}
+			}
+			// Handle regular format [branch-name]
+			return strings.TrimSpace(branchPart)
+		}
+	}
+	
+	return ""
+}
+
 // loadPreviousBranch loads the last known branch from shadow repo metadata
 func (g *GitManager) loadPreviousBranch() (string, error) {
 	// Try to read the previous branch from git config in shadow repo
@@ -157,9 +190,10 @@ func (g *GitManager) addCommitMetadata(commitHash string, changeCount int, commi
 // CreateWatcherSnapshot creates a snapshot specifically from file watcher
 // Used when watcher detects branch changes and needs to auto-commit
 func (g *GitManager) CreateWatcherSnapshot() error {
-	// Update branch state first
-	if err := g.updateBranchState(); err != nil {
-		return fmt.Errorf("failed to update branch state: %w", err)
+	// Get current branch
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 	
 	// Check if there are changes to commit
@@ -184,23 +218,26 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		changeCount = 0
 	}
 	
+	// Check if this is a branch switch by comparing with last commit's branch
+	lastCommitBranch := g.getLastCommitBranch()
+	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
+	
 	var message string
 	var commitType string
 	
-	if g.branchChanged {
+	if isBranchSwitch {
 		// Watcher detected branch change
 		if changeCount > 20 {
 			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)", 
-				g.previousBranch, g.currentBranch, changeCount)
+				lastCommitBranch, currentBranch, changeCount)
 		} else {
 			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)", 
-				g.previousBranch, g.currentBranch, changeCount)
+				lastCommitBranch, currentBranch, changeCount)
 		}
 		commitType = "watcher-branch-switch"
-		g.branchChanged = false
 	} else {
 		// Regular watcher snapshot
-		message = fmt.Sprintf("[%s] Auto-snapshot from file watcher", g.currentBranch)
+		message = fmt.Sprintf("[%s] Auto-snapshot from file watcher", currentBranch)
 		commitType = "watcher-auto"
 	}
 	
@@ -339,31 +376,40 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		changeCount = 0 // Continue even if count fails
 	}
 	
-	// Create smart commit message based on branch state
+	// Get current branch
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	// Check if this is a branch switch by comparing with last commit's branch
+	lastCommitBranch := g.getLastCommitBranch()
+	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
+	
+	// Create smart commit message
 	var enhancedMessage string
 	var commitType string
 	
-	if g.branchChanged {
-		// First commit after branch change - add warnings for large changes
+	if isBranchSwitch {
+		// Branch switch detected
 		if changeCount > 20 {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)", 
-				g.previousBranch, g.currentBranch, message, changeCount)
+				lastCommitBranch, currentBranch, message, changeCount)
 		} else if changeCount > 5 {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)", 
-				g.previousBranch, g.currentBranch, message, changeCount)
+				lastCommitBranch, currentBranch, message, changeCount)
 		} else {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s", 
-				g.previousBranch, g.currentBranch, message)
+				lastCommitBranch, currentBranch, message)
 		}
 		commitType = "branch-switch"
-		g.branchChanged = false // Reset flag after first commit
 	} else {
 		// Normal commit on same branch
 		if message == "" {
 			now := time.Now()
 			message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
 		}
-		enhancedMessage = fmt.Sprintf("[%s] %s", g.currentBranch, message)
+		enhancedMessage = fmt.Sprintf("[%s] %s", currentBranch, message)
 		commitType = "manual"
 	}
 	
