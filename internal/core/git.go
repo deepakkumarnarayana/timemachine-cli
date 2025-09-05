@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,42 +10,16 @@ import (
 )
 
 // GitManager wraps all Git operations for the shadow repository
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
 type GitManager struct {
-	State          *AppState
-	currentBranch  string // Current main repo branch
-	previousBranch string // Previous branch (for branch change detection)
-	branchChanged  bool   // Flag indicating first commit after branch change
+	State *AppState // Only essential state needed
 }
 
 // NewGitManager creates a new GitManager with the given state
 func NewGitManager(state *AppState) *GitManager {
-	manager := &GitManager{State: state}
-	// Initialize branch state on creation
-	manager.initializeBranchState()
-	return manager
+	return &GitManager{State: state}
 }
 
-// initializeBranchState sets up initial branch tracking
-func (g *GitManager) initializeBranchState() {
-	if branch, err := g.GetCurrentBranch(); err == nil {
-		g.currentBranch = branch
-		
-		// Try to load previous branch from shadow repo metadata
-		if prevBranch, err := g.loadPreviousBranch(); err == nil && prevBranch != "" {
-			g.previousBranch = prevBranch
-			// If current branch differs from stored previous branch, mark as changed
-			if g.currentBranch != g.previousBranch {
-				g.branchChanged = true
-			} else {
-				g.branchChanged = false
-			}
-		} else {
-			// First time initialization - no previous branch known
-			g.previousBranch = branch
-			g.branchChanged = false
-		}
-	}
-}
 
 // RunCommand executes a git command with the shadow repo as the git directory
 // CRITICAL: ALWAYS uses --git-dir and --work-tree to ensure operations
@@ -118,40 +93,6 @@ func (g *GitManager) getLastCommitBranch() string {
 	return ""
 }
 
-// loadPreviousBranch loads the last known branch from shadow repo metadata
-func (g *GitManager) loadPreviousBranch() (string, error) {
-	// Try to read the previous branch from git config in shadow repo
-	output, err := g.RunCommand("config", "timemachine.previousBranch")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(output), nil
-}
-
-// savePreviousBranch saves the previous branch to shadow repo metadata
-func (g *GitManager) savePreviousBranch(branch string) error {
-	_, err := g.RunCommand("config", "timemachine.previousBranch", branch)
-	return err
-}
-
-// updateBranchState detects and tracks branch changes in main repository
-func (g *GitManager) updateBranchState() error {
-	newBranch, err := g.GetCurrentBranch()
-	if err != nil {
-		return err
-	}
-	
-	// Detect branch change
-	if g.currentBranch != "" && g.currentBranch != newBranch {
-		g.previousBranch = g.currentBranch
-		g.branchChanged = true
-		// Save the previous branch for next time
-		g.savePreviousBranch(g.previousBranch)
-	}
-	
-	g.currentBranch = newBranch
-	return nil
-}
 
 // countUncommittedFiles counts files that would be included in next commit
 func (g *GitManager) countUncommittedFiles() (int, error) {
@@ -168,34 +109,47 @@ func (g *GitManager) countUncommittedFiles() (int, error) {
 	return len(lines), nil
 }
 
+// SnapshotMetadata represents structured metadata for each snapshot
+type SnapshotMetadata struct {
+	Branch         string    `json:"branch"`
+	PreviousBranch string    `json:"previousBranch,omitempty"`
+	ChangeCount    int       `json:"changeCount"`
+	BranchSwitch   bool      `json:"branchSwitch"`
+	Timestamp      time.Time `json:"timestamp"`
+	Type           string    `json:"type"`
+	FileTypes      []string  `json:"fileTypes,omitempty"`
+	LargeChange    bool      `json:"largeChange"`
+}
+
 // addCommitMetadata adds structured metadata to commit using git notes
-func (g *GitManager) addCommitMetadata(commitHash string, changeCount int, commitType string) error {
-	metadata := fmt.Sprintf(`{
-  "branch": "%s",
-  "previousBranch": "%s",
-  "changeCount": %d,
-  "branchSwitch": %t,
-  "timestamp": "%s",
-  "type": "%s"
-}`, g.currentBranch, g.previousBranch, changeCount, g.branchChanged, time.Now().Format(time.RFC3339), commitType)
+func (g *GitManager) addCommitMetadata(commitHash, currentBranch, lastCommitBranch string, changeCount int, commitType string, isBranchSwitch bool) error {
+	metadata := SnapshotMetadata{
+		Branch:         currentBranch,
+		PreviousBranch: lastCommitBranch,
+		ChangeCount:    changeCount,
+		BranchSwitch:   isBranchSwitch,
+		Timestamp:      time.Now(),
+		Type:           commitType,
+		LargeChange:    changeCount > 20,
+	}
 	
-	_, err := g.RunCommand("notes", "add", "-m", metadata, commitHash)
+	jsonData, err := json.Marshal(metadata)
 	if err != nil {
-		// Don't fail commit if notes fail - metadata is optional
+		fmt.Printf("Warning: failed to marshal metadata: %v\n", err)
+		return nil // Don't fail commit for metadata issues
+	}
+	
+	_, err = g.RunCommand("notes", "add", "-m", string(jsonData), commitHash)
+	if err != nil {
+		// Don't fail commit if notes fail - text extraction is primary
 		fmt.Printf("Warning: failed to add commit metadata: %v\n", err)
 	}
 	return nil
 }
 
 // CreateWatcherSnapshot creates a snapshot specifically from file watcher
-// Used when watcher detects branch changes and needs to auto-commit
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
 func (g *GitManager) CreateWatcherSnapshot() error {
-	// Get current branch
-	currentBranch, err := g.GetCurrentBranch()
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
-	}
-	
 	// Check if there are changes to commit
 	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
@@ -212,6 +166,12 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		return fmt.Errorf("failed to stage changes: %w", err)
 	}
 	
+	// Get current branch from main repository
+	currentBranch, err := g.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
 	// Count changes
 	changeCount, err := g.countUncommittedFiles()
 	if err != nil {
@@ -219,9 +179,11 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 	}
 	
 	// Check if this is a branch switch by comparing with last commit's branch
+	// PRIMARY: Text extraction from commit history (reliable, human-readable)
 	lastCommitBranch := g.getLastCommitBranch()
 	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
 	
+	// Create smart commit message (PRIMARY source of truth)
 	var message string
 	var commitType string
 	
@@ -241,13 +203,13 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		commitType = "watcher-auto"
 	}
 	
-	// Create commit
+	// Create commit with human-readable message
 	output, err := g.RunCommand("commit", "-m", message)
 	if err != nil {
 		return fmt.Errorf("failed to create watcher snapshot: %w", err)
 	}
 	
-	// Add metadata
+	// Add structured metadata using git notes (SECONDARY - fast queries)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) > 0 {
 		commitInfo := lines[0]
@@ -255,7 +217,8 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 			parts := strings.Fields(commitInfo)
 			if len(parts) >= 2 {
 				commitHash := strings.Trim(parts[1], "[]")
-				g.addCommitMetadata(commitHash, changeCount, commitType)
+				// Store rich structured metadata in git notes
+				g.addCommitMetadata(commitHash, currentBranch, lastCommitBranch, changeCount, commitType, isBranchSwitch)
 			}
 		}
 	}
@@ -346,13 +309,8 @@ func (g *GitManager) CopyGitConfig() error {
 }
 
 // CreateSnapshot creates a new snapshot with branch-aware intelligence
-// Detects branch changes and creates contextual commit messages with warnings
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
 func (g *GitManager) CreateSnapshot(message string) error {
-	// Update branch state and detect changes
-	if err := g.updateBranchState(); err != nil {
-		return fmt.Errorf("failed to update branch state: %w", err)
-	}
-	
 	// Stage everything including untracked files
 	_, err := g.RunCommand("add", "-A")
 	if err != nil {
@@ -376,17 +334,18 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		changeCount = 0 // Continue even if count fails
 	}
 	
-	// Get current branch
+	// Get current branch from main repository
 	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 	
 	// Check if this is a branch switch by comparing with last commit's branch
+	// PRIMARY: Text extraction from commit history (reliable, human-readable)
 	lastCommitBranch := g.getLastCommitBranch()
 	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
 	
-	// Create smart commit message
+	// Create smart commit message (PRIMARY source of truth)
 	var enhancedMessage string
 	var commitType string
 	
@@ -413,23 +372,23 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		commitType = "manual"
 	}
 	
-	// Create the commit
+	// Create the commit with human-readable message
 	output, err := g.RunCommand("commit", "-m", enhancedMessage)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot: %w", err)
 	}
 	
-	// Extract commit hash from output (format: "[branch hash] message")
+	// Extract commit hash from git commit output
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	commitInfo := lines[0] // First line contains commit info
 	
-	// Add metadata for filtering and analysis
+	// Add structured metadata using git notes (SECONDARY - fast queries)
 	if strings.Contains(commitInfo, "[") {
-		// Try to extract hash from git commit output
 		parts := strings.Fields(commitInfo)
 		if len(parts) >= 2 {
 			commitHash := strings.Trim(parts[1], "[]")
-			g.addCommitMetadata(commitHash, changeCount, commitType)
+			// Store rich structured metadata in git notes
+			g.addCommitMetadata(commitHash, currentBranch, lastCommitBranch, changeCount, commitType, isBranchSwitch)
 		}
 	}
 	
@@ -519,14 +478,61 @@ func (g *GitManager) ListSnapshotsByBranch(branchName string, limit int) ([]Snap
 	return filtered, nil
 }
 
-// GetSnapshotMetadata retrieves metadata for a snapshot using git notes
-func (g *GitManager) GetSnapshotMetadata(hash string) (string, error) {
+// GetSnapshotMetadata retrieves structured metadata for a snapshot using git notes
+func (g *GitManager) GetSnapshotMetadata(hash string) (*SnapshotMetadata, error) {
 	output, err := g.RunCommand("notes", "show", hash)
 	if err != nil {
-		// Notes don't exist for this commit
-		return "", nil
+		// Notes don't exist for this commit - fallback to text extraction
+		return g.extractMetadataFromCommitMessage(hash)
 	}
-	return strings.TrimSpace(output), nil
+	
+	var metadata SnapshotMetadata
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &metadata); err != nil {
+		// Notes exist but are corrupted - fallback to text extraction
+		fmt.Printf("Warning: corrupted metadata notes for %s, using text extraction\n", hash)
+		return g.extractMetadataFromCommitMessage(hash)
+	}
+	
+	return &metadata, nil
+}
+
+// extractMetadataFromCommitMessage creates metadata by parsing commit message (fallback)
+func (g *GitManager) extractMetadataFromCommitMessage(hash string) (*SnapshotMetadata, error) {
+	output, err := g.RunCommand("log", "-1", "--format=%s", hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit message: %w", err)
+	}
+	
+	message := strings.TrimSpace(output)
+	metadata := &SnapshotMetadata{
+		Timestamp: time.Now(), // Approximate, could get actual commit time
+		Type:      "unknown",
+	}
+	
+	// Parse branch information from commit message
+	if strings.HasPrefix(message, "[") {
+		endBracket := strings.Index(message, "]")
+		if endBracket > 1 {
+			branchPart := message[1:endBracket]
+			
+			// Handle branch switch format [prev→curr]
+			if strings.Contains(branchPart, "→") {
+				parts := strings.Split(branchPart, "→")
+				if len(parts) >= 2 {
+					metadata.PreviousBranch = strings.TrimSpace(parts[0])
+					metadata.Branch = strings.TrimSpace(parts[1])
+					metadata.BranchSwitch = true
+					metadata.Type = "branch-switch"
+				}
+			} else {
+				// Handle regular format [branch-name]
+				metadata.Branch = strings.TrimSpace(branchPart)
+				metadata.BranchSwitch = false
+			}
+		}
+	}
+	
+	return metadata, nil
 }
 
 // ListBranchSwitches returns all commits that represent branch switches
