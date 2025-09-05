@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/commands"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/spf13/cobra"
 )
 
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 var rootCmd = &cobra.Command{
 	Use:     "timemachine",
@@ -48,7 +48,7 @@ your codebase and creates snapshots without affecting your main Git workflow.
 			fmt.Printf("Time Machine CLI v%s\n", Version)
 			return
 		}
-		
+
 		// Show enhanced help with current status
 		state, err := core.NewAppState()
 		if err != nil {
@@ -64,7 +64,7 @@ your codebase and creates snapshots without affecting your main Git workflow.
 			}
 			fmt.Println()
 		}
-		
+
 		fmt.Println("Use 'timemachine --help' for detailed command information")
 		fmt.Println("Use 'timemachine <command> --help' for specific command help")
 	},
@@ -73,18 +73,18 @@ your codebase and creates snapshots without affecting your main Git workflow.
 func init() {
 	// Add version flag
 	rootCmd.Flags().BoolP("version", "v", false, "Show version information")
-	
+
 	// Add commands in logical order
-	rootCmd.AddCommand(commands.InitCmd())      // Setup
-	rootCmd.AddCommand(commands.ConfigCmd())    // Configuration  
-	rootCmd.AddCommand(commands.StartCmd())     // Core functionality
-	rootCmd.AddCommand(commands.SnapshotCmd())  // Manual snapshots
-	rootCmd.AddCommand(commands.ListCmd())      // Inspection
-	rootCmd.AddCommand(commands.ShowCmd())      // Inspection
-	rootCmd.AddCommand(commands.InspectCmd())   // Inspection
-	rootCmd.AddCommand(commands.RestoreCmd())   // Recovery
-	rootCmd.AddCommand(commands.StatusCmd())    // Status
-	rootCmd.AddCommand(commands.CleanCmd())     // Maintenance
+	rootCmd.AddCommand(commands.InitCmd())     // Setup
+	rootCmd.AddCommand(commands.ConfigCmd())   // Configuration
+	rootCmd.AddCommand(commands.StartCmd())    // Core functionality
+	rootCmd.AddCommand(commands.SnapshotCmd()) // Manual snapshots
+	rootCmd.AddCommand(commands.ListCmd())     // Inspection
+	rootCmd.AddCommand(commands.ShowCmd())     // Inspection
+	rootCmd.AddCommand(commands.InspectCmd())  // Inspection
+	rootCmd.AddCommand(commands.RestoreCmd())  // Recovery
+	rootCmd.AddCommand(commands.StatusCmd())   // Status
+	rootCmd.AddCommand(commands.CleanCmd())    // Maintenance
 }
 
 func main() {
