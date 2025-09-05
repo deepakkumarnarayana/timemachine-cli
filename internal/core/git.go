@@ -28,8 +28,21 @@ func NewGitManager(state *AppState) *GitManager {
 func (g *GitManager) initializeBranchState() {
 	if branch, err := g.GetCurrentBranch(); err == nil {
 		g.currentBranch = branch
-		g.previousBranch = branch
-		g.branchChanged = false
+		
+		// Try to load previous branch from shadow repo metadata
+		if prevBranch, err := g.loadPreviousBranch(); err == nil && prevBranch != "" {
+			g.previousBranch = prevBranch
+			// If current branch differs from stored previous branch, mark as changed
+			if g.currentBranch != g.previousBranch {
+				g.branchChanged = true
+			} else {
+				g.branchChanged = false
+			}
+		} else {
+			// First time initialization - no previous branch known
+			g.previousBranch = branch
+			g.branchChanged = false
+		}
 	}
 }
 
@@ -72,6 +85,22 @@ func (g *GitManager) GetCurrentBranch() (string, error) {
 	return branch, nil
 }
 
+// loadPreviousBranch loads the last known branch from shadow repo metadata
+func (g *GitManager) loadPreviousBranch() (string, error) {
+	// Try to read the previous branch from git config in shadow repo
+	output, err := g.RunCommand("config", "timemachine.previousBranch")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// savePreviousBranch saves the previous branch to shadow repo metadata
+func (g *GitManager) savePreviousBranch(branch string) error {
+	_, err := g.RunCommand("config", "timemachine.previousBranch", branch)
+	return err
+}
+
 // updateBranchState detects and tracks branch changes in main repository
 func (g *GitManager) updateBranchState() error {
 	newBranch, err := g.GetCurrentBranch()
@@ -83,6 +112,8 @@ func (g *GitManager) updateBranchState() error {
 	if g.currentBranch != "" && g.currentBranch != newBranch {
 		g.previousBranch = g.currentBranch
 		g.branchChanged = true
+		// Save the previous branch for next time
+		g.savePreviousBranch(g.previousBranch)
 	}
 	
 	g.currentBranch = newBranch
