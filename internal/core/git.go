@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -60,17 +61,49 @@ func (g *GitManager) GetCurrentBranch() (string, error) {
 	return branch, nil
 }
 
-// getLastCommitBranch extracts the branch name from the last commit message
-func (g *GitManager) getLastCommitBranch() string {
+// BranchDetectionResult provides detailed information about branch detection
+type BranchDetectionResult struct {
+	LastBranch    string
+	HasHistory    bool
+	IsCorrupted   bool
+	CommitCount   int
+}
+
+// getLastCommitBranchAdvanced extracts branch info with enhanced fallback logic
+func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
+	result := BranchDetectionResult{
+		LastBranch:  "",
+		HasHistory:  false,
+		IsCorrupted: false,
+		CommitCount: 0,
+	}
+	
+	// First, check if we have any commit history
+	countOutput, err := g.RunCommand("rev-list", "--count", "--all")
+	if err == nil {
+		if count, parseErr := strconv.Atoi(strings.TrimSpace(countOutput)); parseErr == nil {
+			result.CommitCount = count
+			result.HasHistory = count > 0
+		}
+	}
+	
+	// If no history, return early (this is initial commit scenario)
+	if !result.HasHistory {
+		return result
+	}
+	
 	// Get the last commit message
 	output, err := g.RunCommand("log", "-1", "--format=%s")
 	if err != nil {
-		return "" // No commits yet or error
+		// This shouldn't happen if HasHistory=true, so mark as corrupted
+		result.IsCorrupted = true
+		return result
 	}
 	
 	message := strings.TrimSpace(output)
 	if message == "" {
-		return ""
+		result.IsCorrupted = true
+		return result
 	}
 	
 	// Extract branch from format [branch-name] or [prev→curr]
@@ -82,15 +115,24 @@ func (g *GitManager) getLastCommitBranch() string {
 			if strings.Contains(branchPart, "→") {
 				parts := strings.Split(branchPart, "→")
 				if len(parts) >= 2 {
-					return strings.TrimSpace(parts[1]) // Return current branch from switch
+					result.LastBranch = strings.TrimSpace(parts[1]) // Return current branch from switch
+					return result
 				}
 			}
 			// Handle regular format [branch-name]
-			return strings.TrimSpace(branchPart)
+			result.LastBranch = strings.TrimSpace(branchPart)
+			return result
 		}
 	}
 	
-	return ""
+	// Message doesn't follow our format - mark as corrupted but don't fail
+	result.IsCorrupted = true
+	return result
+}
+
+// getLastCommitBranch extracts the branch name from the last commit message (backward compatibility)
+func (g *GitManager) getLastCommitBranch() string {
+	return g.getLastCommitBranchAdvanced().LastBranch
 }
 
 
@@ -178,23 +220,51 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		changeCount = 0
 	}
 	
-	// Check if this is a branch switch by comparing with last commit's branch
+	// Check if this is a branch switch using enhanced detection
 	// PRIMARY: Text extraction from commit history (reliable, human-readable)
-	lastCommitBranch := g.getLastCommitBranch()
-	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
+	branchDetection := g.getLastCommitBranchAdvanced()
+	
+	// Determine if this is a branch switch with enhanced logic
+	var isBranchSwitch bool
+	var isInitialCommit bool
+	
+	if !branchDetection.HasHistory {
+		// This is the very first commit in shadow repo
+		isInitialCommit = true
+		isBranchSwitch = false
+	} else if branchDetection.IsCorrupted {
+		// Previous commit message is corrupted, treat as branch switch
+		fmt.Printf("Warning: Previous commit message corrupted, treating as potential branch switch\n")
+		isBranchSwitch = true
+	} else if branchDetection.LastBranch == "" {
+		// No branch info found, treat as switch
+		isBranchSwitch = true
+	} else {
+		// Normal case: compare branches
+		isBranchSwitch = branchDetection.LastBranch != currentBranch
+	}
 	
 	// Create smart commit message (PRIMARY source of truth)
 	var message string
 	var commitType string
 	
-	if isBranchSwitch {
+	if isInitialCommit {
+		// Very first watcher commit
+		message = fmt.Sprintf("[%s] INITIAL: Auto-snapshot from file watcher", currentBranch)
+		commitType = "watcher-initial"
+	} else if isBranchSwitch {
 		// Watcher detected branch change
+		lastBranch := branchDetection.LastBranch
+		if lastBranch == "" {
+			lastBranch = "unknown" // Handle corrupted/missing data gracefully
+		}
+		
 		if changeCount > 20 {
 			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)", 
-				lastCommitBranch, currentBranch, changeCount)
+				lastBranch, currentBranch, changeCount)
 		} else {
 			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)", 
-				lastCommitBranch, currentBranch, changeCount)
+				lastBranch, currentBranch, changeCount)
 		}
 		commitType = "watcher-branch-switch"
 	} else {
@@ -218,7 +288,11 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 			if len(parts) >= 2 {
 				commitHash := strings.Trim(parts[1], "[]")
 				// Store rich structured metadata in git notes
-				g.addCommitMetadata(commitHash, currentBranch, lastCommitBranch, changeCount, commitType, isBranchSwitch)
+				lastBranch := branchDetection.LastBranch
+				if lastBranch == "" && !isInitialCommit {
+					lastBranch = "unknown" // Handle corrupted data
+				}
+				g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
 			}
 		}
 	}
@@ -340,26 +414,58 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 	
-	// Check if this is a branch switch by comparing with last commit's branch
+	// Check if this is a branch switch using enhanced detection
 	// PRIMARY: Text extraction from commit history (reliable, human-readable)
-	lastCommitBranch := g.getLastCommitBranch()
-	isBranchSwitch := lastCommitBranch != "" && lastCommitBranch != currentBranch
+	branchDetection := g.getLastCommitBranchAdvanced()
+	
+	// Determine if this is a branch switch with enhanced logic
+	var isBranchSwitch bool
+	var isInitialCommit bool
+	
+	if !branchDetection.HasHistory {
+		// This is the very first commit in shadow repo
+		isInitialCommit = true
+		isBranchSwitch = false
+	} else if branchDetection.IsCorrupted {
+		// Previous commit message is corrupted, but we can still detect current branch change
+		// Use git notes fallback or assume this is a potential branch switch
+		fmt.Printf("Warning: Previous commit message corrupted, treating as potential branch switch\n")
+		isBranchSwitch = true // Be conservative and treat as branch switch
+	} else if branchDetection.LastBranch == "" {
+		// No branch info found in last commit, treat as switch
+		isBranchSwitch = true
+	} else {
+		// Normal case: compare branches
+		isBranchSwitch = branchDetection.LastBranch != currentBranch
+	}
 	
 	// Create smart commit message (PRIMARY source of truth)
 	var enhancedMessage string
 	var commitType string
 	
-	if isBranchSwitch {
-		// Branch switch detected
+	if isInitialCommit {
+		// Very first commit in shadow repository
+		if message == "" {
+			message = "Initial TimeMachine snapshot"
+		}
+		enhancedMessage = fmt.Sprintf("[%s] INITIAL: %s", currentBranch, message)
+		commitType = "initial"
+	} else if isBranchSwitch {
+		// Branch switch detected (including corrupted data recovery)
+		lastBranch := branchDetection.LastBranch
+		if lastBranch == "" {
+			lastBranch = "unknown" // Handle corrupted/missing data gracefully
+		}
+		
 		if changeCount > 20 {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)", 
-				lastCommitBranch, currentBranch, message, changeCount)
+				lastBranch, currentBranch, message, changeCount)
 		} else if changeCount > 5 {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)", 
-				lastCommitBranch, currentBranch, message, changeCount)
+				lastBranch, currentBranch, message, changeCount)
 		} else {
 			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s", 
-				lastCommitBranch, currentBranch, message)
+				lastBranch, currentBranch, message)
 		}
 		commitType = "branch-switch"
 	} else {
@@ -388,7 +494,11 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		if len(parts) >= 2 {
 			commitHash := strings.Trim(parts[1], "[]")
 			// Store rich structured metadata in git notes
-			g.addCommitMetadata(commitHash, currentBranch, lastCommitBranch, changeCount, commitType, isBranchSwitch)
+			lastBranch := branchDetection.LastBranch
+			if lastBranch == "" && !isInitialCommit {
+				lastBranch = "unknown" // Handle corrupted data
+			}
+			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
 		}
 	}
 	
