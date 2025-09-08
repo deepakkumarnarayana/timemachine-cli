@@ -66,6 +66,10 @@ func sanitizeFilePath(path string) (string, error) {
 	// Clean and normalize the path
 	cleaned := filepath.Clean(path)
 	
+	// Convert to forward slashes for cross-platform consistency
+	// Windows filepath.Clean() converts / to \, but we want / for Git compatibility
+	cleaned = filepath.ToSlash(cleaned)
+	
 	// Final validation: ensure cleaning didn't create an absolute path
 	if strings.HasPrefix(cleaned, "/") || filepath.IsAbs(cleaned) {
 		return "", fmt.Errorf("path must be relative after normalization")
