@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 jobs:
   # Test Matrix - Multiple OS and Go versions
@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.21', '1.25']
+        go-version: ['1.21', '1.24']
         
     steps:
     - name: Set up Go ${{ matrix.go-version }}
