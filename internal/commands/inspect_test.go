@@ -88,11 +88,11 @@ func TestValidateGitHash(t *testing.T) {
 // TestSanitizeFilePath tests the file path sanitization function
 func TestSanitizeFilePath(t *testing.T) {
 	testCases := []struct {
-		name     string
-		path     string
-		want     string
-		wantErr  bool
-		errMsg   string
+		name         string
+		path         string
+		want         string
+		wantErr      bool
+		errMsgAny    []string // Accept any of these error messages for cross-platform compatibility
 	}{
 		{
 			name: "empty path allowed",
@@ -118,37 +118,37 @@ func TestSanitizeFilePath(t *testing.T) {
 			name:    "directory traversal attack",
 			path:    "../etc/passwd",
 			wantErr: true,
-			errMsg:  "path traversal not allowed",
+			errMsgAny: []string{"path traversal not allowed", "path must be local and relative"},
 		},
 		{
 			name:    "directory traversal in middle",
 			path:    "src/../etc/passwd",
 			wantErr: true,
-			errMsg:  "path traversal not allowed",
+			errMsgAny: []string{"path traversal not allowed", "path must be local and relative"},
 		},
 		{
 			name:    "absolute path",
 			path:    "/etc/passwd",
 			wantErr: true,
-			errMsg:  "absolute paths not allowed",
+			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
 			name:    "windows absolute path",
 			path:    "C:\\Windows\\System32",
 			wantErr: true,
-			errMsg:  "absolute paths not allowed",
+			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
 			name:    "windows absolute path with forward slash",
 			path:    "C:/Windows/System32",
 			wantErr: true,
-			errMsg:  "absolute paths not allowed",
+			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
 			name:    "path becomes absolute after cleaning",
 			path:    "/../etc/passwd",
 			wantErr: true,
-			errMsg:  "path traversal not allowed",
+			errMsgAny: []string{"path traversal not allowed", "path must be local and relative", "path must be relative after normalization"},
 		},
 	}
 
@@ -158,9 +158,20 @@ func TestSanitizeFilePath(t *testing.T) {
 			if tc.wantErr {
 				if err == nil {
 					t.Errorf("sanitizeFilePath(%q) expected error, got nil", tc.path)
-				} else if tc.errMsg != "" && !strings.Contains(err.Error(), tc.errMsg) {
-					t.Errorf("sanitizeFilePath(%q) error = %v, want error containing %q", 
-						tc.path, err, tc.errMsg)
+				} else if len(tc.errMsgAny) > 0 {
+					// Check if error message contains any of the expected messages
+					errStr := err.Error()
+					foundMatch := false
+					for _, expectedMsg := range tc.errMsgAny {
+						if strings.Contains(errStr, expectedMsg) {
+							foundMatch = true
+							break
+						}
+					}
+					if !foundMatch {
+						t.Errorf("sanitizeFilePath(%q) error = %v, want error containing one of %v", 
+							tc.path, err, tc.errMsgAny)
+					}
 				}
 			} else {
 				if err != nil {

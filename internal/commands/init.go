@@ -10,6 +10,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
 )
 
 // InitCmd creates the init command
@@ -235,14 +236,32 @@ func createDefaultTimemachineIgnore(projectRoot string) error {
 
 // installPostPushHook installs or updates the post-push hook for automatic cleanup
 // MUST preserve existing hook content and only append if not already present
+// Supports both Unix (shell script) and Windows (batch file) hooks
 func installPostPushHook(gitDir string) error {
-	hookPath := filepath.Join(gitDir, "hooks", "post-push")
-	
 	// Create hooks directory if it doesn't exist
-	hooksDir := filepath.Dir(hookPath)
+	hooksDir := filepath.Join(gitDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create hooks directory: %w", err)
 	}
+	
+	// Install Unix shell script hook (primary, works on all platforms)
+	if err := installUnixHook(hooksDir); err != nil {
+		return fmt.Errorf("failed to install Unix hook: %w", err)
+	}
+	
+	// Install Windows batch file hook for better Windows compatibility
+	if utils.IsWindows() {
+		if err := installWindowsHook(hooksDir); err != nil {
+			return fmt.Errorf("failed to install Windows hook: %w", err)
+		}
+	}
+	
+	return nil
+}
+
+// installUnixHook installs the shell script version of the hook
+func installUnixHook(hooksDir string) error {
+	hookPath := filepath.Join(hooksDir, "post-push")
 	
 	// Read existing hook content
 	var existingContent []string
@@ -274,7 +293,7 @@ func installPostPushHook(gitDir string) error {
 		return nil
 	}
 	
-	// Time Machine hook content
+	// Time Machine hook content for Unix/shell
 	timemachineHook := []string{
 		"",
 		"# Time Machine auto-cleanup",
@@ -317,9 +336,39 @@ func installPostPushHook(gitDir string) error {
 		return fmt.Errorf("failed to flush hook file: %w", err)
 	}
 	
-	// Make hook executable
-	if err := os.Chmod(hookPath, 0755); err != nil {
+	// Make hook executable using cross-platform function
+	if err := utils.MakeExecutable(hookPath); err != nil {
 		return fmt.Errorf("failed to make hook executable: %w", err)
+	}
+	
+	return nil
+}
+
+// installWindowsHook installs a Windows batch file version of the hook
+func installWindowsHook(hooksDir string) error {
+	hookPath := filepath.Join(hooksDir, "post-push.bat")
+	
+	// Check if Windows hook already exists
+	if _, err := os.Stat(hookPath); err == nil {
+		// Read existing content to check for timemachine
+		content, err := os.ReadFile(hookPath)
+		if err == nil && strings.Contains(string(content), "timemachine clean") {
+			return nil // Already exists
+		}
+	}
+	
+	// Windows batch file content
+	batchContent := `@echo off
+REM Time Machine auto-cleanup
+where timemachine >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    timemachine clean --auto --quiet
+)
+`
+	
+	// Create or update the batch file
+	if err := os.WriteFile(hookPath, []byte(batchContent), 0644); err != nil {
+		return fmt.Errorf("failed to write Windows batch hook: %w", err)
 	}
 	
 	return nil

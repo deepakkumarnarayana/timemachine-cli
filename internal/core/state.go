@@ -34,8 +34,11 @@ func NewAppState() (*AppState, error) {
 		return nil, errors.New("not in a Git repository (or any parent directory)")
 	}
 
-	// Set ProjectRoot to parent of .git
+	// Set ProjectRoot to parent of .git - resolve symlinks for cross-platform compatibility
 	projectRoot := filepath.Dir(gitDir)
+	if resolved, err := filepath.EvalSymlinks(projectRoot); err == nil {
+		projectRoot = resolved
+	}
 	
 	// Set ShadowRepoDir to .git/timemachine_snapshots
 	shadowRepoDir := filepath.Join(gitDir, "timemachine_snapshots")
