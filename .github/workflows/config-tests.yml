@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.20', '1.21']
+        go-version: ['1.21', '1.25']
         
     steps:
     - name: Set up Go ${{ matrix.go-version }}
@@ -189,7 +189,7 @@ jobs:
         gosec -fmt=json -out=gosec-report.json -stdout -verbose=text ./internal/config/...
 
     - name: Upload gosec results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: gosec-results
@@ -226,7 +226,7 @@ jobs:
         go test -bench=. -benchmem -timeout=30m ./internal/config/... | tee benchmark-results.txt
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results
         path: benchmark-results.txt
