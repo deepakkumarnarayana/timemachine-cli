@@ -132,8 +132,15 @@ git --git-dir=.git/timemachine_snapshots log --oneline
 git status  # Should not show timemachine changes
 ```
 
+## Documentation Structure
+
+- **User Documentation**: `docs/branch-detection.md` - User-focused guide for AI development workflows
+- **Technical Documentation**: `docs/features/BRANCH_DETECTION.md` - Implementation details and API reference  
+- **Configuration Documentation**: `docs/configuration/` - Enterprise configuration, security, and troubleshooting
+- **Documentation Index**: `docs/README.md` - Navigation guide for all documentation
+
 ## Dependencies
-dk test
+
 - **fsnotify**: File system event monitoring
 - **cobra**: CLI framework and command structure
 - **color**: Terminal output coloring

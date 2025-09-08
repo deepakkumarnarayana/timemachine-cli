@@ -53,7 +53,7 @@ your codebase and creates snapshots without affecting your main Git workflow.
 		state, err := core.NewAppState()
 		if err != nil {
 			fmt.Printf("⚠️  Warning: %v\n", err)
-			fmt.Println("   Some commands may not work outside of a Git repository.\n")
+			fmt.Println("   Some commands may not work outside of a Git repository.")
 		} else {
 			fmt.Printf("📂 Git Repository: %s\n", state.ProjectRoot)
 			if state.IsInitialized {

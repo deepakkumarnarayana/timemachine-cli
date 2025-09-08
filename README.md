@@ -29,6 +29,7 @@ Time Machine uses a **shadow repository** (`.git/timemachine_snapshots/`) that s
 - ✅ **Instant snapshots** without affecting staging area or commits
 - ✅ **Safe restoration** using `git restore --worktree`
 - ✅ **Automatic cleanup** via post-push hooks
+- ✅ **Intelligent branch detection** with automatic branch switch tracking and context
 
 ## 📋 Commands
 
@@ -43,8 +44,10 @@ Initialize Time Machine in your Git repository
 Start watching for file changes (press Ctrl+C to stop)
 - Monitors all files recursively
 - Ignores build directories (`node_modules/`, `dist/`, etc.)
-- Groups rapid changes with 500ms debounce delay
-- Creates automatic snapshots with timestamps
+- Groups rapid changes with 2000ms debounce delay
+- Creates automatic snapshots with timestamps and intelligent branch context
+- Automatically detects and tracks branch switches with `[prev→curr] BRANCH SWITCH:` format
+- Provides file change counts and warnings for large changes (20+ files)
 
 ### `timemachine list`
 List recent snapshots
@@ -135,17 +138,49 @@ $ timemachine start
 # Edit files, add features, etc.
 📸 Creating snapshot... ✅ Done! (Latest: 2 seconds ago)
 
-# Something breaks? Instant recovery!
+# Switch branches for AI assistance
+$ git checkout -b feature-auth
+📸 [main→feature-auth] BRANCH SWITCH: Working on authentication (5 files)
+
+# AI makes changes, then something breaks? Instant recovery!
 $ timemachine list
 📸 Recent snapshots:
 
-abc12345  Added user authentication     2 minutes ago  
-def67890  Fixed CSS styling issues      5 minutes ago
-ghi09876  Initial working homepage      8 minutes ago
+abc12345  [main→feature-auth] BRANCH SWITCH: AI authentication work (12 files)    2 minutes ago  
+def67890  [main] Working version before AI changes                              5 minutes ago
+ghi09876  [develop→main] BRANCH SWITCH: Merged latest updates                   8 minutes ago
 
 $ timemachine restore def67890
-✨ Files restored successfully!
+✨ Files restored successfully! Back to working state on main branch.
 ```
+
+## 🌟 Branch Detection Intelligence
+
+TimeMachine automatically tracks your Git workflow and provides rich context in snapshot messages:
+
+### Message Formats
+- **Initial commits**: `[branch] INITIAL: message`
+- **Branch switches**: `[prev→curr] BRANCH SWITCH: message (file count)`  
+- **Regular snapshots**: `[branch] message`
+- **Large changes**: `(25 files - LARGE CHANGES ⚠️)` for 20+ files
+
+### Real Example History
+```bash
+$ timemachine list
+
+[main→ai-refactor] BRANCH SWITCH: Let AI restructure code (47 files - LARGE CHANGES ⚠️)
+[main] Working authentication system  
+[feature→main] BRANCH SWITCH: Merged stable login feature (8 files)
+[feature] INITIAL: Started user authentication work
+```
+
+### Perfect for AI Development
+- **Know your context**: See exactly when and where AI made changes
+- **Safe experimentation**: Clear restore points before AI modifications  
+- **Change awareness**: File counts and warnings for large modifications
+- **Branch boundaries**: Use branch switches as natural checkpoints
+
+[📖 **Full Branch Detection Guide**](docs/branch-detection.md) - Complete user guide with examples and best practices
 
 ## 🔍 Advanced Usage
 

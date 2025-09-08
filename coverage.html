@@ -1,0 +1,1632 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>core: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/deepakkumarnarayana/timemachine-cli/internal/core/debouncer.go (100.0%)</option>
+				
+				<option value="file1">github.com/deepakkumarnarayana/timemachine-cli/internal/core/git.go (50.2%)</option>
+				
+				<option value="file2">github.com/deepakkumarnarayana/timemachine-cli/internal/core/ignore.go (87.2%)</option>
+				
+				<option value="file3">github.com/deepakkumarnarayana/timemachine-cli/internal/core/state.go (75.0%)</option>
+				
+				<option value="file4">github.com/deepakkumarnarayana/timemachine-cli/internal/core/watcher.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package core
+
+import (
+        "sync"
+        "time"
+)
+
+// Debouncer groups rapid events together to prevent spam
+// Critical for preventing hundreds of snapshots during npm install, etc.
+type Debouncer struct {
+        delay time.Duration
+        timer *time.Timer
+        mu    sync.Mutex
+}
+
+// NewDebouncer creates a new debouncer with the specified delay
+func NewDebouncer(delay time.Duration) *Debouncer <span class="cov8" title="1">{
+        return &amp;Debouncer{
+                delay: delay,
+        }
+}</span>
+
+// Trigger schedules a function to be executed after the debounce delay
+// If called again before the delay expires, the previous call is cancelled
+// This ensures rapid changes create only ONE snapshot
+func (d *Debouncer) Trigger(fn func()) <span class="cov8" title="1">{
+        d.mu.Lock()
+        defer d.mu.Unlock()
+
+        // Cancel existing timer if any
+        if d.timer != nil </span><span class="cov8" title="1">{
+                d.timer.Stop()
+        }</span>
+
+        // Create new timer with delay
+        <span class="cov8" title="1">d.timer = time.AfterFunc(d.delay, func() </span><span class="cov8" title="1">{
+                fn()
+                // Clear timer after execution
+                d.mu.Lock()
+                d.timer = nil
+                d.mu.Unlock()
+        }</span>)
+}
+
+// Cancel stops any pending execution
+func (d *Debouncer) Cancel() <span class="cov8" title="1">{
+        d.mu.Lock()
+        defer d.mu.Unlock()
+
+        if d.timer != nil </span><span class="cov8" title="1">{
+                d.timer.Stop()
+                d.timer = nil
+        }</span>
+}
+
+// IsActive returns true if there's a pending execution
+func (d *Debouncer) IsActive() bool <span class="cov8" title="1">{
+        d.mu.Lock()
+        defer d.mu.Unlock()
+
+        return d.timer != nil
+}</pre>
+		
+		<pre class="file" id="file1" style="display: none">package core
+
+import (
+        "encoding/json"
+        "fmt"
+        "os"
+        "os/exec"
+        "strconv"
+        "strings"
+        "time"
+)
+
+// GitManager wraps all Git operations for the shadow repository
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
+type GitManager struct {
+        State *AppState // Only essential state needed
+}
+
+// NewGitManager creates a new GitManager with the given state
+func NewGitManager(state *AppState) *GitManager <span class="cov8" title="1">{
+        return &amp;GitManager{State: state}
+}</span>
+
+
+// RunCommand executes a git command with the shadow repo as the git directory
+// CRITICAL: ALWAYS uses --git-dir and --work-tree to ensure operations
+// happen in shadow repo, not main repo
+func (g *GitManager) RunCommand(args ...string) (string, error) <span class="cov8" title="1">{
+        // Build command: git --git-dir=&lt;shadow_repo_path&gt; --work-tree=&lt;project_root&gt; &lt;args&gt;
+        fullArgs := []string{
+                "--git-dir=" + g.State.ShadowRepoDir,
+                "--work-tree=" + g.State.ProjectRoot,
+        }
+        fullArgs = append(fullArgs, args...)
+        
+        cmd := exec.Command("git", fullArgs...)
+        
+        // Capture both stdout and stderr
+        output, err := cmd.CombinedOutput()
+        
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("git command failed: %s\nOutput: %s", err.Error(), string(output))
+        }</span>
+        
+        <span class="cov8" title="1">return strings.TrimSpace(string(output)), nil</span>
+}
+
+// GetCurrentBranch returns the currently active branch in the main repository
+func (g *GitManager) GetCurrentBranch() (string, error) <span class="cov8" title="1">{
+        cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "branch", "--show-current")
+        output, err := cmd.Output()
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to get current branch: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">branch := strings.TrimSpace(string(output))
+        if branch == "" </span><span class="cov0" title="0">{
+                return "main", nil // Default to main if detached HEAD or empty
+        }</span>
+        
+        <span class="cov8" title="1">return branch, nil</span>
+}
+
+// BranchDetectionResult provides detailed information about branch detection
+type BranchDetectionResult struct {
+        LastBranch    string
+        HasHistory    bool
+        IsCorrupted   bool
+        CommitCount   int
+}
+
+// getLastCommitBranchAdvanced extracts branch info with enhanced fallback logic
+func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult <span class="cov8" title="1">{
+        result := BranchDetectionResult{
+                LastBranch:  "",
+                HasHistory:  false,
+                IsCorrupted: false,
+                CommitCount: 0,
+        }
+        
+        // First, check if we have any commit history
+        countOutput, err := g.RunCommand("rev-list", "--count", "--all")
+        if err == nil </span><span class="cov8" title="1">{
+                if count, parseErr := strconv.Atoi(strings.TrimSpace(countOutput)); parseErr == nil </span><span class="cov8" title="1">{
+                        result.CommitCount = count
+                        result.HasHistory = count &gt; 0
+                }</span>
+        }
+        
+        // If no history, return early (this is initial commit scenario)
+        <span class="cov8" title="1">if !result.HasHistory </span><span class="cov8" title="1">{
+                return result
+        }</span>
+        
+        // Get the last commit message
+        <span class="cov8" title="1">output, err := g.RunCommand("log", "-1", "--format=%s")
+        if err != nil </span><span class="cov0" title="0">{
+                // This shouldn't happen if HasHistory=true, so mark as corrupted
+                result.IsCorrupted = true
+                return result
+        }</span>
+        
+        <span class="cov8" title="1">message := strings.TrimSpace(output)
+        if message == "" </span><span class="cov0" title="0">{
+                result.IsCorrupted = true
+                return result
+        }</span>
+        
+        // Extract branch from format [branch-name] or [prev→curr]
+        <span class="cov8" title="1">if strings.HasPrefix(message, "[") </span><span class="cov8" title="1">{
+                endBracket := strings.Index(message, "]")
+                if endBracket &gt; 1 </span><span class="cov8" title="1">{
+                        branchPart := message[1:endBracket]
+                        // Handle branch switch format [prev→curr]
+                        if strings.Contains(branchPart, "→") </span><span class="cov0" title="0">{
+                                parts := strings.Split(branchPart, "→")
+                                if len(parts) &gt;= 2 </span><span class="cov0" title="0">{
+                                        result.LastBranch = strings.TrimSpace(parts[1]) // Return current branch from switch
+                                        return result
+                                }</span>
+                        }
+                        // Handle regular format [branch-name]
+                        <span class="cov8" title="1">result.LastBranch = strings.TrimSpace(branchPart)
+                        return result</span>
+                }
+        }
+        
+        // Message doesn't follow our format - mark as corrupted but don't fail
+        <span class="cov0" title="0">result.IsCorrupted = true
+        return result</span>
+}
+
+// getLastCommitBranch extracts the branch name from the last commit message (backward compatibility)
+func (g *GitManager) getLastCommitBranch() string <span class="cov0" title="0">{
+        return g.getLastCommitBranchAdvanced().LastBranch
+}</span>
+
+
+// countUncommittedFiles counts files that would be included in next commit
+func (g *GitManager) countUncommittedFiles() (int, error) <span class="cov8" title="1">{
+        status, err := g.RunCommand("status", "--porcelain")
+        if err != nil </span><span class="cov0" title="0">{
+                return 0, err
+        }</span>
+        
+        <span class="cov8" title="1">if strings.TrimSpace(status) == "" </span><span class="cov0" title="0">{
+                return 0, nil
+        }</span>
+        
+        <span class="cov8" title="1">lines := strings.Split(strings.TrimSpace(status), "\n")
+        return len(lines), nil</span>
+}
+
+// SnapshotMetadata represents structured metadata for each snapshot
+type SnapshotMetadata struct {
+        Branch         string    `json:"branch"`
+        PreviousBranch string    `json:"previousBranch,omitempty"`
+        ChangeCount    int       `json:"changeCount"`
+        BranchSwitch   bool      `json:"branchSwitch"`
+        Timestamp      time.Time `json:"timestamp"`
+        Type           string    `json:"type"`
+        FileTypes      []string  `json:"fileTypes,omitempty"`
+        LargeChange    bool      `json:"largeChange"`
+}
+
+// addCommitMetadata adds structured metadata to commit using git notes
+func (g *GitManager) addCommitMetadata(commitHash, currentBranch, lastCommitBranch string, changeCount int, commitType string, isBranchSwitch bool) error <span class="cov8" title="1">{
+        metadata := SnapshotMetadata{
+                Branch:         currentBranch,
+                PreviousBranch: lastCommitBranch,
+                ChangeCount:    changeCount,
+                BranchSwitch:   isBranchSwitch,
+                Timestamp:      time.Now(),
+                Type:           commitType,
+                LargeChange:    changeCount &gt; 20,
+        }
+        
+        jsonData, err := json.Marshal(metadata)
+        if err != nil </span><span class="cov0" title="0">{
+                fmt.Printf("Warning: failed to marshal metadata: %v\n", err)
+                return nil // Don't fail commit for metadata issues
+        }</span>
+        
+        <span class="cov8" title="1">_, err = g.RunCommand("notes", "add", "-m", string(jsonData), commitHash)
+        if err != nil </span><span class="cov8" title="1">{
+                // Don't fail commit if notes fail - text extraction is primary
+                fmt.Printf("Warning: failed to add commit metadata: %v\n", err)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// CreateWatcherSnapshot creates a snapshot specifically from file watcher
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
+func (g *GitManager) CreateWatcherSnapshot() error <span class="cov0" title="0">{
+        // Check if there are changes to commit
+        status, err := g.RunCommand("status", "--porcelain")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to check status: %w", err)
+        }</span>
+        
+        <span class="cov0" title="0">if strings.TrimSpace(status) == "" </span><span class="cov0" title="0">{
+                return nil // No changes to commit
+        }</span>
+        
+        // Stage all changes
+        <span class="cov0" title="0">_, err = g.RunCommand("add", "-A")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to stage changes: %w", err)
+        }</span>
+        
+        // Get current branch from main repository
+        <span class="cov0" title="0">currentBranch, err := g.GetCurrentBranch()
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to get current branch: %w", err)
+        }</span>
+        
+        // Count changes
+        <span class="cov0" title="0">changeCount, err := g.countUncommittedFiles()
+        if err != nil </span><span class="cov0" title="0">{
+                changeCount = 0
+        }</span>
+        
+        // Check if this is a branch switch using enhanced detection
+        // PRIMARY: Text extraction from commit history (reliable, human-readable)
+        <span class="cov0" title="0">branchDetection := g.getLastCommitBranchAdvanced()
+        
+        // Determine if this is a branch switch with enhanced logic
+        var isBranchSwitch bool
+        var isInitialCommit bool
+        
+        if !branchDetection.HasHistory </span><span class="cov0" title="0">{
+                // This is the very first commit in shadow repo
+                isInitialCommit = true
+                isBranchSwitch = false
+        }</span> else<span class="cov0" title="0"> if branchDetection.IsCorrupted </span><span class="cov0" title="0">{
+                // Previous commit message is corrupted, treat as branch switch
+                fmt.Printf("Warning: Previous commit message corrupted, treating as potential branch switch\n")
+                isBranchSwitch = true
+        }</span> else<span class="cov0" title="0"> if branchDetection.LastBranch == "" </span><span class="cov0" title="0">{
+                // No branch info found, treat as switch
+                isBranchSwitch = true
+        }</span> else<span class="cov0" title="0"> {
+                // Normal case: compare branches
+                isBranchSwitch = branchDetection.LastBranch != currentBranch
+        }</span>
+        
+        // Create smart commit message (PRIMARY source of truth)
+        <span class="cov0" title="0">var message string
+        var commitType string
+        
+        if isInitialCommit </span><span class="cov0" title="0">{
+                // Very first watcher commit
+                message = fmt.Sprintf("[%s] INITIAL: Auto-snapshot from file watcher", currentBranch)
+                commitType = "watcher-initial"
+        }</span> else<span class="cov0" title="0"> if isBranchSwitch </span><span class="cov0" title="0">{
+                // Watcher detected branch change
+                lastBranch := branchDetection.LastBranch
+                if lastBranch == "" </span><span class="cov0" title="0">{
+                        lastBranch = "unknown" // Handle corrupted/missing data gracefully
+                }</span>
+                
+                <span class="cov0" title="0">if changeCount &gt; 20 </span><span class="cov0" title="0">{
+                        message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)", 
+                                lastBranch, currentBranch, changeCount)
+                }</span> else<span class="cov0" title="0"> {
+                        message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)", 
+                                lastBranch, currentBranch, changeCount)
+                }</span>
+                <span class="cov0" title="0">commitType = "watcher-branch-switch"</span>
+        } else<span class="cov0" title="0"> {
+                // Regular watcher snapshot
+                message = fmt.Sprintf("[%s] Auto-snapshot from file watcher", currentBranch)
+                commitType = "watcher-auto"
+        }</span>
+        
+        // Create commit with human-readable message
+        <span class="cov0" title="0">output, err := g.RunCommand("commit", "-m", message)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create watcher snapshot: %w", err)
+        }</span>
+        
+        // Add structured metadata using git notes (SECONDARY - fast queries)
+        <span class="cov0" title="0">lines := strings.Split(strings.TrimSpace(output), "\n")
+        if len(lines) &gt; 0 </span><span class="cov0" title="0">{
+                commitInfo := lines[0]
+                if strings.Contains(commitInfo, "[") </span><span class="cov0" title="0">{
+                        parts := strings.Fields(commitInfo)
+                        if len(parts) &gt;= 2 </span><span class="cov0" title="0">{
+                                commitHash := strings.Trim(parts[1], "[]")
+                                // Store rich structured metadata in git notes
+                                lastBranch := branchDetection.LastBranch
+                                if lastBranch == "" &amp;&amp; !isInitialCommit </span><span class="cov0" title="0">{
+                                        lastBranch = "unknown" // Handle corrupted data
+                                }</span>
+                                <span class="cov0" title="0">g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)</span>
+                        }
+                }
+        }
+        
+        <span class="cov0" title="0">return nil</span>
+}
+
+// InitializeShadowRepo creates and initializes the shadow repository
+func (g *GitManager) InitializeShadowRepo() error <span class="cov8" title="1">{
+        // Create .git/timemachine_snapshots directory
+        if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create shadow repo directory: %w", err)
+        }</span>
+        
+        // Initialize the shadow repo
+        <span class="cov8" title="1">_, err := g.RunCommand("init")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to initialize shadow repository: %w", err)
+        }</span>
+        
+        // Copy user.name and user.email from main repo
+        <span class="cov8" title="1">if err := g.CopyGitConfig(); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to copy git config: %w", err)
+        }</span>
+        
+        // Create initial empty commit to establish repository history
+        <span class="cov8" title="1">if err := g.createInitialCommit(); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create initial commit: %w", err)
+        }</span>
+        
+        // Update state
+        <span class="cov8" title="1">g.State.IsInitialized = true
+        
+        return nil</span>
+}
+
+// SetupShadowRepo creates and initializes the shadow repository without any commits
+// Use this + CreateSnapshot() instead of InitializeShadowRepo() to avoid redundant empty commits
+func (g *GitManager) SetupShadowRepo() error <span class="cov8" title="1">{
+        // Create .git/timemachine_snapshots directory
+        if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create shadow repo directory: %w", err)
+        }</span>
+        
+        // Initialize the shadow repo
+        <span class="cov8" title="1">_, err := g.RunCommand("init")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to initialize shadow repository: %w", err)
+        }</span>
+        
+        // Copy user.name and user.email from main repo
+        <span class="cov8" title="1">if err := g.CopyGitConfig(); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to copy git config: %w", err)
+        }</span>
+        
+        // DO NOT create any commits - let CreateSnapshot() handle that
+        // Update state
+        <span class="cov8" title="1">g.State.IsInitialized = true
+        
+        return nil</span>
+}
+
+// CopyGitConfig copies user.name and user.email from the main repo to shadow repo
+func (g *GitManager) CopyGitConfig() error <span class="cov8" title="1">{
+        // Get user.name from main repo
+        cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "config", "user.name")
+        nameOutput, err := cmd.Output()
+        if err == nil &amp;&amp; len(nameOutput) &gt; 0 </span><span class="cov8" title="1">{
+                name := strings.TrimSpace(string(nameOutput))
+                _, err = g.RunCommand("config", "user.name", name)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to set user.name: %w", err)
+                }</span>
+        }
+        
+        // Get user.email from main repo
+        <span class="cov8" title="1">cmd = exec.Command("git", "--git-dir="+g.State.GitDir, "config", "user.email")
+        emailOutput, err := cmd.Output()
+        if err == nil &amp;&amp; len(emailOutput) &gt; 0 </span><span class="cov8" title="1">{
+                email := strings.TrimSpace(string(emailOutput))
+                _, err = g.RunCommand("config", "user.email", email)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to set user.email: %w", err)
+                }</span>
+        }
+        
+        <span class="cov8" title="1">return nil</span>
+}
+
+// CreateSnapshot creates a new snapshot with branch-aware intelligence
+// Uses hybrid approach: text extraction (primary) + git notes (secondary)
+func (g *GitManager) CreateSnapshot(message string) error <span class="cov8" title="1">{
+        // Stage everything including untracked files
+        _, err := g.RunCommand("add", "-A")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to stage files: %w", err)
+        }</span>
+        
+        // Check if there are any changes to commit
+        <span class="cov8" title="1">status, err := g.RunCommand("status", "--porcelain")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to check status: %w", err)
+        }</span>
+        
+        // If no changes, don't create empty commits
+        <span class="cov8" title="1">if strings.TrimSpace(status) == "" </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        
+        // Count files being committed
+        <span class="cov8" title="1">changeCount, err := g.countUncommittedFiles()
+        if err != nil </span><span class="cov0" title="0">{
+                changeCount = 0 // Continue even if count fails
+        }</span>
+        
+        // Get current branch from main repository
+        <span class="cov8" title="1">currentBranch, err := g.GetCurrentBranch()
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to get current branch: %w", err)
+        }</span>
+        
+        // Check if this is a branch switch using enhanced detection
+        // PRIMARY: Text extraction from commit history (reliable, human-readable)
+        <span class="cov8" title="1">branchDetection := g.getLastCommitBranchAdvanced()
+        
+        // Determine if this is a branch switch with enhanced logic
+        var isBranchSwitch bool
+        var isInitialCommit bool
+        
+        if !branchDetection.HasHistory </span><span class="cov8" title="1">{
+                // This is the very first commit in shadow repo
+                isInitialCommit = true
+                isBranchSwitch = false
+        }</span> else<span class="cov8" title="1"> if branchDetection.IsCorrupted </span><span class="cov0" title="0">{
+                // Previous commit message is corrupted, but we can still detect current branch change
+                // Use git notes fallback or assume this is a potential branch switch
+                fmt.Printf("Warning: Previous commit message corrupted, treating as potential branch switch\n")
+                isBranchSwitch = true // Be conservative and treat as branch switch
+        }</span> else<span class="cov8" title="1"> if branchDetection.LastBranch == "" </span><span class="cov0" title="0">{
+                // No branch info found in last commit, treat as switch
+                isBranchSwitch = true
+        }</span> else<span class="cov8" title="1"> {
+                // Normal case: compare branches
+                isBranchSwitch = branchDetection.LastBranch != currentBranch
+        }</span>
+        
+        // Create smart commit message (PRIMARY source of truth)
+        <span class="cov8" title="1">var enhancedMessage string
+        var commitType string
+        
+        if isInitialCommit </span><span class="cov8" title="1">{
+                // Very first commit in shadow repository
+                if message == "" </span><span class="cov0" title="0">{
+                        message = "Initial TimeMachine snapshot"
+                }</span>
+                <span class="cov8" title="1">enhancedMessage = fmt.Sprintf("[%s] INITIAL: %s", currentBranch, message)
+                commitType = "initial"</span>
+        } else<span class="cov8" title="1"> if isBranchSwitch </span><span class="cov8" title="1">{
+                // Branch switch detected (including corrupted data recovery)
+                lastBranch := branchDetection.LastBranch
+                if lastBranch == "" </span><span class="cov0" title="0">{
+                        lastBranch = "unknown" // Handle corrupted/missing data gracefully
+                }</span>
+                
+                <span class="cov8" title="1">if changeCount &gt; 20 </span><span class="cov0" title="0">{
+                        enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)", 
+                                lastBranch, currentBranch, message, changeCount)
+                }</span> else<span class="cov8" title="1"> if changeCount &gt; 5 </span><span class="cov0" title="0">{
+                        enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)", 
+                                lastBranch, currentBranch, message, changeCount)
+                }</span> else<span class="cov8" title="1"> {
+                        enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s", 
+                                lastBranch, currentBranch, message)
+                }</span>
+                <span class="cov8" title="1">commitType = "branch-switch"</span>
+        } else<span class="cov8" title="1"> {
+                // Normal commit on same branch
+                if message == "" </span><span class="cov8" title="1">{
+                        now := time.Now()
+                        message = fmt.Sprintf("Snapshot at %s", now.Format("15:04:05"))
+                }</span>
+                <span class="cov8" title="1">enhancedMessage = fmt.Sprintf("[%s] %s", currentBranch, message)
+                commitType = "manual"</span>
+        }
+        
+        // Create the commit with human-readable message
+        <span class="cov8" title="1">output, err := g.RunCommand("commit", "-m", enhancedMessage)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create snapshot: %w", err)
+        }</span>
+        
+        // Extract commit hash from git commit output
+        <span class="cov8" title="1">lines := strings.Split(strings.TrimSpace(output), "\n")
+        commitInfo := lines[0] // First line contains commit info
+        
+        // Add structured metadata using git notes (SECONDARY - fast queries)
+        if strings.Contains(commitInfo, "[") </span><span class="cov8" title="1">{
+                parts := strings.Fields(commitInfo)
+                if len(parts) &gt;= 2 </span><span class="cov8" title="1">{
+                        commitHash := strings.Trim(parts[1], "[]")
+                        // Store rich structured metadata in git notes
+                        lastBranch := branchDetection.LastBranch
+                        if lastBranch == "" &amp;&amp; !isInitialCommit </span><span class="cov0" title="0">{
+                                lastBranch = "unknown" // Handle corrupted data
+                        }</span>
+                        <span class="cov8" title="1">g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)</span>
+                }
+        }
+        
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Snapshot represents a Git commit snapshot
+type Snapshot struct {
+        Hash    string // Full commit hash
+        Message string // Commit message
+        Time    string // Relative time (e.g., "2 minutes ago")
+}
+
+// ListSnapshots returns a list of snapshots, optionally filtered by file
+func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, error) <span class="cov8" title="1">{
+        // Build git log command
+        args := []string{"log", "--oneline", "--date=relative"}
+        
+        // Add pretty format to get hash, message, and relative time
+        args = append(args, "--pretty=format:%H|%s|%ar")
+        
+        // Add limit if specified
+        if limit &gt; 0 </span><span class="cov8" title="1">{
+                args = append(args, fmt.Sprintf("-%d", limit))
+        }</span>
+        
+        // Add file filter if specified
+        <span class="cov8" title="1">if filePath != "" </span><span class="cov8" title="1">{
+                args = append(args, "--", filePath)
+        }</span>
+        
+        <span class="cov8" title="1">output, err := g.RunCommand(args...)
+        if err != nil </span><span class="cov8" title="1">{
+                // If no commits exist yet, return empty slice (not error)
+                if strings.Contains(err.Error(), "does not have any commits yet") </span><span class="cov8" title="1">{
+                        return []Snapshot{}, nil
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to list snapshots: %w", err)</span>
+        }
+        
+        // Parse output into Snapshot structs
+        <span class="cov8" title="1">lines := strings.Split(strings.TrimSpace(output), "\n")
+        snapshots := make([]Snapshot, 0, len(lines))
+        
+        for _, line := range lines </span><span class="cov8" title="1">{
+                if line == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                
+                <span class="cov8" title="1">parts := strings.SplitN(line, "|", 3)
+                if len(parts) != 3 </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                
+                <span class="cov8" title="1">snapshots = append(snapshots, Snapshot{
+                        Hash:    parts[0],
+                        Message: parts[1],
+                        Time:    parts[2],
+                })</span>
+        }
+        
+        <span class="cov8" title="1">return snapshots, nil</span>
+}
+
+// ListSnapshotsByBranch returns snapshots filtered by branch name
+func (g *GitManager) ListSnapshotsByBranch(branchName string, limit int) ([]Snapshot, error) <span class="cov0" title="0">{
+        // Get all snapshots first
+        snapshots, err := g.ListSnapshots(0, "") // Get all snapshots
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        
+        // Filter by branch name in commit message
+        <span class="cov0" title="0">var filtered []Snapshot
+        branchPattern := fmt.Sprintf("[%s]", branchName)
+        switchPattern := fmt.Sprintf("→%s]", branchName) // Also catch branch switches TO this branch
+        
+        for _, snapshot := range snapshots </span><span class="cov0" title="0">{
+                if strings.Contains(snapshot.Message, branchPattern) || strings.Contains(snapshot.Message, switchPattern) </span><span class="cov0" title="0">{
+                        filtered = append(filtered, snapshot)
+                        if limit &gt; 0 &amp;&amp; len(filtered) &gt;= limit </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+                }
+        }
+        
+        <span class="cov0" title="0">return filtered, nil</span>
+}
+
+// GetSnapshotMetadata retrieves structured metadata for a snapshot using git notes
+func (g *GitManager) GetSnapshotMetadata(hash string) (*SnapshotMetadata, error) <span class="cov0" title="0">{
+        output, err := g.RunCommand("notes", "show", hash)
+        if err != nil </span><span class="cov0" title="0">{
+                // Notes don't exist for this commit - fallback to text extraction
+                return g.extractMetadataFromCommitMessage(hash)
+        }</span>
+        
+        <span class="cov0" title="0">var metadata SnapshotMetadata
+        if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &amp;metadata); err != nil </span><span class="cov0" title="0">{
+                // Notes exist but are corrupted - fallback to text extraction
+                fmt.Printf("Warning: corrupted metadata notes for %s, using text extraction\n", hash)
+                return g.extractMetadataFromCommitMessage(hash)
+        }</span>
+        
+        <span class="cov0" title="0">return &amp;metadata, nil</span>
+}
+
+// extractMetadataFromCommitMessage creates metadata by parsing commit message (fallback)
+func (g *GitManager) extractMetadataFromCommitMessage(hash string) (*SnapshotMetadata, error) <span class="cov0" title="0">{
+        output, err := g.RunCommand("log", "-1", "--format=%s", hash)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get commit message: %w", err)
+        }</span>
+        
+        <span class="cov0" title="0">message := strings.TrimSpace(output)
+        metadata := &amp;SnapshotMetadata{
+                Timestamp: time.Now(), // Approximate, could get actual commit time
+                Type:      "unknown",
+        }
+        
+        // Parse branch information from commit message
+        if strings.HasPrefix(message, "[") </span><span class="cov0" title="0">{
+                endBracket := strings.Index(message, "]")
+                if endBracket &gt; 1 </span><span class="cov0" title="0">{
+                        branchPart := message[1:endBracket]
+                        
+                        // Handle branch switch format [prev→curr]
+                        if strings.Contains(branchPart, "→") </span><span class="cov0" title="0">{
+                                parts := strings.Split(branchPart, "→")
+                                if len(parts) &gt;= 2 </span><span class="cov0" title="0">{
+                                        metadata.PreviousBranch = strings.TrimSpace(parts[0])
+                                        metadata.Branch = strings.TrimSpace(parts[1])
+                                        metadata.BranchSwitch = true
+                                        metadata.Type = "branch-switch"
+                                }</span>
+                        } else<span class="cov0" title="0"> {
+                                // Handle regular format [branch-name]
+                                metadata.Branch = strings.TrimSpace(branchPart)
+                                metadata.BranchSwitch = false
+                        }</span>
+                }
+        }
+        
+        <span class="cov0" title="0">return metadata, nil</span>
+}
+
+// ListBranchSwitches returns all commits that represent branch switches
+func (g *GitManager) ListBranchSwitches(limit int) ([]Snapshot, error) <span class="cov0" title="0">{
+        snapshots, err := g.ListSnapshots(0, "")
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        
+        <span class="cov0" title="0">var switches []Snapshot
+        for _, snapshot := range snapshots </span><span class="cov0" title="0">{
+                // Look for branch switch indicators in commit message
+                if strings.Contains(snapshot.Message, "→") &amp;&amp; strings.Contains(snapshot.Message, "BRANCH SWITCH") </span><span class="cov0" title="0">{
+                        switches = append(switches, snapshot)
+                        if limit &gt; 0 &amp;&amp; len(switches) &gt;= limit </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+                }
+        }
+        
+        <span class="cov0" title="0">return switches, nil</span>
+}
+
+// RestoreSnapshot restores files from a specific snapshot
+// NEVER use checkout or reset - they affect staging area
+// ALWAYS use git restore --source=&lt;hash&gt; --worktree
+func (g *GitManager) RestoreSnapshot(hash string, files []string) error <span class="cov8" title="1">{
+        args := []string{"restore", "--source=" + hash, "--worktree"}
+        
+        if len(files) == 0 </span><span class="cov8" title="1">{
+                // Restore everything
+                args = append(args, ".")
+        }</span> else<span class="cov8" title="1"> {
+                // Restore specific files
+                args = append(args, files...)
+        }</span>
+        
+        <span class="cov8" title="1">_, err := g.RunCommand(args...)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to restore snapshot: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">return nil</span>
+}
+
+// createInitialCommit creates an initial commit with current project state
+func (g *GitManager) createInitialCommit() error <span class="cov8" title="1">{
+        // Stage all current files
+        _, err := g.RunCommand("add", "-A")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to stage files for initial commit: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">currentBranch, err := g.GetCurrentBranch()
+        if err != nil </span><span class="cov0" title="0">{
+                currentBranch = "main"
+        }</span>
+        
+        <span class="cov8" title="1">message := fmt.Sprintf("[%s] Initial TimeMachine shadow repository", currentBranch)
+        
+        // Check if there are files to commit
+        status, err := g.RunCommand("status", "--porcelain")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to check status for initial commit: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">if strings.TrimSpace(status) == "" </span><span class="cov8" title="1">{
+                // No files to commit, create empty commit
+                _, err = g.RunCommand("commit", "--allow-empty", "-m", message)
+        }</span> else<span class="cov0" title="0"> {
+                // Files exist, create normal commit
+                _, err = g.RunCommand("commit", "-m", message)
+        }</span>
+        
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create initial commit: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">return nil</span>
+}</pre>
+		
+		<pre class="file" id="file2" style="display: none">package core
+
+import (
+        "bufio"
+        "fmt"
+        "log"
+        "os"
+        "path/filepath"
+        "strings"
+        "sync"
+        "unsafe"
+)
+
+// Constants based on real-world analysis and Git's approach
+const (
+        MaxIgnoreFileSize   = 10 * 1024 * 1024 // 10MB (Git allows 100MB, but we're more conservative)
+        MaxIgnoreLines      = 10000             // Maximum lines in ignore file
+        MaxPatternLength    = 4096              // 4KB per pattern (very generous)
+        MaxPatterns         = 1000              // More than any real project needs
+        MaxPathCacheEntries = 10000             // Cache for file path results
+        MaxCacheMemoryMB    = 50                // Memory limit for cache (50MB)
+        DefaultIgnoreFile   = ".timemachine-ignore"
+)
+
+// IgnorePattern represents a parsed ignore pattern with optimizations
+type IgnorePattern struct {
+        Original    string // Original pattern text
+        Pattern     string // Processed pattern (without ! or /)
+        IsNegation  bool   // Pattern starts with !
+        IsDirectory bool   // Pattern ends with /
+        IsAbsolute  bool   // Pattern starts with /
+        IsSimple    bool   // No wildcards (fast path)
+}
+
+// EnhancedIgnoreManager provides high-performance ignore pattern matching
+// with Git-inspired optimizations and thread-safe caching
+type EnhancedIgnoreManager struct {
+        // Core data
+        patterns    []IgnorePattern
+        projectRoot string
+        ignoreFile  string
+
+        // Performance cache (thread-safe)
+        pathCache   map[string]bool
+        cacheMutex  sync.RWMutex
+        cacheMemory int64
+
+        // Statistics (for monitoring/debugging)
+        cacheHits   int64
+        cacheMisses int64
+        totalChecks int64
+}
+
+// NewEnhancedIgnoreManager creates a new enhanced ignore manager with caching
+func NewEnhancedIgnoreManager(projectRoot string) *EnhancedIgnoreManager <span class="cov8" title="1">{
+        manager := &amp;EnhancedIgnoreManager{
+                projectRoot: projectRoot,
+                ignoreFile:  filepath.Join(projectRoot, DefaultIgnoreFile),
+                pathCache:   make(map[string]bool),
+        }
+
+        // Load patterns from .timemachine-ignore file
+        if err := manager.loadIgnoreFile(); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Warning: Failed to load ignore patterns: %v", err)
+        }</span>
+
+        <span class="cov8" title="1">return manager</span>
+}
+
+// loadIgnoreFile loads and parses the .timemachine-ignore file
+func (eim *EnhancedIgnoreManager) loadIgnoreFile() error <span class="cov8" title="1">{
+        file, err := os.Open(eim.ignoreFile)
+        if os.IsNotExist(err) </span><span class="cov8" title="1">{
+                log.Printf("Info: No %s file found, using no custom ignore patterns", DefaultIgnoreFile)
+                return nil // No file is okay
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to open ignore file: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer file.Close()
+
+        // Security: Check file size before reading
+        if stat, err := file.Stat(); err == nil </span><span class="cov8" title="1">{
+                if stat.Size() &gt; MaxIgnoreFileSize </span><span class="cov0" title="0">{
+                        return fmt.Errorf("ignore file too large: %d bytes (max %d bytes)", 
+                                stat.Size(), MaxIgnoreFileSize)
+                }</span>
+        }
+
+        <span class="cov8" title="1">scanner := bufio.NewScanner(file)
+        
+        // Set buffer size for long lines
+        buf := make([]byte, MaxPatternLength)
+        scanner.Buffer(buf, MaxPatternLength)
+
+        lineCount := 0
+        patternCount := 0
+
+        for scanner.Scan() </span><span class="cov8" title="1">{
+                lineCount++
+                
+                // Security: Limit total lines
+                if lineCount &gt; MaxIgnoreLines </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Ignore file has too many lines (%d), truncating at %d", 
+                                lineCount, MaxIgnoreLines)
+                        break</span>
+                }
+
+                <span class="cov8" title="1">line := strings.TrimSpace(scanner.Text())
+                
+                // Skip empty lines and comments
+                if line == "" || strings.HasPrefix(line, "#") </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                // Security: Check pattern length
+                <span class="cov8" title="1">if len(line) &gt; MaxPatternLength </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Pattern too long, skipping: %.50s...", line)
+                        continue</span>
+                }
+
+                // Parse pattern
+                <span class="cov8" title="1">pattern, err := eim.parsePattern(line)
+                if err != nil </span><span class="cov8" title="1">{
+                        log.Printf("Warning: Invalid pattern '%s': %v", line, err)
+                        continue</span>
+                }
+
+                // Security: Limit total patterns
+                <span class="cov8" title="1">if patternCount &gt;= MaxPatterns </span><span class="cov8" title="1">{
+                        log.Printf("Warning: Too many patterns (%d), ignoring remaining", MaxPatterns)
+                        break</span>
+                }
+
+                <span class="cov8" title="1">eim.patterns = append(eim.patterns, pattern)
+                patternCount++</span>
+        }
+
+        <span class="cov8" title="1">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to read ignore file: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Loaded %d ignore patterns from %s", len(eim.patterns), DefaultIgnoreFile)
+        return nil</span>
+}
+
+// parsePattern parses a single ignore pattern line
+func (eim *EnhancedIgnoreManager) parsePattern(line string) (IgnorePattern, error) <span class="cov8" title="1">{
+        if line == "" </span><span class="cov8" title="1">{
+                return IgnorePattern{}, fmt.Errorf("empty pattern")
+        }</span>
+
+        <span class="cov8" title="1">pattern := IgnorePattern{
+                Original: line,
+                Pattern:  line,
+        }
+
+        // Handle negation (!)
+        if strings.HasPrefix(line, "!") </span><span class="cov8" title="1">{
+                pattern.IsNegation = true
+                pattern.Pattern = line[1:]
+                if pattern.Pattern == "" </span><span class="cov8" title="1">{
+                        return IgnorePattern{}, fmt.Errorf("empty negation pattern")
+                }</span>
+        }
+
+        // Handle directory patterns (/)
+        <span class="cov8" title="1">if strings.HasSuffix(pattern.Pattern, "/") </span><span class="cov8" title="1">{
+                pattern.IsDirectory = true
+                pattern.Pattern = strings.TrimSuffix(pattern.Pattern, "/")
+        }</span>
+
+        // Handle absolute patterns (leading /)
+        <span class="cov8" title="1">if strings.HasPrefix(pattern.Pattern, "/") </span><span class="cov8" title="1">{
+                pattern.IsAbsolute = true
+                pattern.Pattern = strings.TrimPrefix(pattern.Pattern, "/")
+        }</span>
+
+        // Check if pattern is simple (no wildcards) for fast path
+        <span class="cov8" title="1">pattern.IsSimple = !strings.ContainsAny(pattern.Pattern, "*?[]")
+
+        // Basic validation
+        if pattern.Pattern == "" </span><span class="cov8" title="1">{
+                return IgnorePattern{}, fmt.Errorf("empty pattern after processing")
+        }</span>
+
+        <span class="cov8" title="1">return pattern, nil</span>
+}
+
+// ShouldIgnore determines if a file path should be ignored
+// This is the main entry point called by the watcher
+func (eim *EnhancedIgnoreManager) ShouldIgnore(path string) bool <span class="cov8" title="1">{
+        // Convert to relative path
+        relPath, err := filepath.Rel(eim.projectRoot, path)
+        if err != nil </span><span class="cov0" title="0">{
+                relPath = path // Fallback to absolute path
+        }</span>
+        <span class="cov8" title="1">relPath = filepath.ToSlash(relPath) // Normalize path separators
+
+        // Check cache first (thread-safe read)
+        eim.cacheMutex.RLock()
+        result, exists := eim.pathCache[relPath]
+        eim.cacheMutex.RUnlock()
+
+        if exists </span><span class="cov8" title="1">{
+                // Thread-safe counter increment
+                eim.cacheMutex.Lock()
+                eim.cacheHits++
+                eim.totalChecks++
+                eim.cacheMutex.Unlock()
+                return result
+        }</span>
+
+        // Compute result
+        <span class="cov8" title="1">result = eim.matchPatterns(relPath)
+
+        // Cache result and update stats (thread-safe)
+        eim.cacheMutex.Lock()
+        eim.cacheMisses++
+        eim.totalChecks++
+        eim.cacheMutex.Unlock()
+        
+        eim.addToCache(relPath, result)
+
+        return result</span>
+}
+
+// matchPatterns checks if a path matches any ignore patterns
+func (eim *EnhancedIgnoreManager) matchPatterns(relPath string) bool <span class="cov8" title="1">{
+        filename := filepath.Base(relPath)
+        dirname := filepath.Dir(relPath)
+        
+        // Process patterns in order (later patterns can override earlier ones)
+        ignored := false
+        
+        for _, pattern := range eim.patterns </span><span class="cov8" title="1">{
+                var matched bool
+                
+                if pattern.IsDirectory </span><span class="cov8" title="1">{
+                        // Directory pattern: check against directory components
+                        matched = eim.matchDirectoryPattern(pattern, relPath, dirname)
+                }</span> else<span class="cov8" title="1"> {
+                        // File pattern: check against filename or full path
+                        matched = eim.matchFilePattern(pattern, relPath, filename)
+                }</span>
+                
+                <span class="cov8" title="1">if matched </span><span class="cov8" title="1">{
+                        ignored = !pattern.IsNegation // Negation patterns un-ignore
+                }</span>
+        }
+        
+        <span class="cov8" title="1">return ignored</span>
+}
+
+// matchFilePattern matches a file pattern against a path
+func (eim *EnhancedIgnoreManager) matchFilePattern(pattern IgnorePattern, relPath, filename string) bool <span class="cov8" title="1">{
+        if pattern.IsAbsolute </span><span class="cov8" title="1">{
+                // For absolute patterns, match against the path from root
+                if pattern.IsSimple </span><span class="cov8" title="1">{
+                        // Check if path starts with pattern (for directories) or equals pattern (for files)
+                        return strings.HasPrefix(relPath, pattern.Pattern+"/") || relPath == pattern.Pattern
+                }</span>
+                <span class="cov0" title="0">matched, err := filepath.Match(pattern.Pattern, relPath)
+                return err == nil &amp;&amp; matched</span>
+        }
+
+        // For non-absolute patterns, match against filename or check if file is within pattern directory
+        <span class="cov8" title="1">if pattern.IsSimple </span><span class="cov8" title="1">{
+                // If pattern contains slash, it should match path components
+                if strings.Contains(pattern.Pattern, "/") </span><span class="cov8" title="1">{
+                        // Check if the relative path starts with this pattern (for directories)
+                        // or equals this pattern (for exact file matches)
+                        return strings.HasPrefix(relPath, pattern.Pattern+"/") || relPath == pattern.Pattern
+                }</span>
+                // Fast path: exact string matching against filename only
+                <span class="cov8" title="1">return filename == pattern.Pattern</span>
+        }
+
+        // Use Go's filepath.Match for wildcard patterns
+        // If pattern contains slash, match against full relative path, otherwise just filename
+        <span class="cov8" title="1">matchTarget := filename
+        if strings.Contains(pattern.Pattern, "/") </span><span class="cov0" title="0">{
+                matchTarget = relPath
+        }</span>
+        <span class="cov8" title="1">matched, err := filepath.Match(pattern.Pattern, matchTarget)
+        return err == nil &amp;&amp; matched</span>
+}
+
+// matchDirectoryPattern matches a directory pattern against a path
+func (eim *EnhancedIgnoreManager) matchDirectoryPattern(pattern IgnorePattern, relPath, dirname string) bool <span class="cov8" title="1">{
+        if pattern.IsAbsolute </span><span class="cov8" title="1">{
+                // For absolute directory patterns, match against path from root
+                if pattern.IsSimple </span><span class="cov8" title="1">{
+                        return strings.HasPrefix(relPath, pattern.Pattern+"/") || 
+                               dirname == pattern.Pattern ||
+                               relPath == pattern.Pattern
+                }</span>
+                <span class="cov0" title="0">matched, err := filepath.Match(pattern.Pattern, dirname)
+                return err == nil &amp;&amp; matched</span>
+        }
+
+        // For non-absolute directory patterns, match against any directory component
+        <span class="cov8" title="1">if pattern.IsSimple </span><span class="cov8" title="1">{
+                // Check if any part of the path contains this directory
+                return strings.Contains(relPath, "/"+pattern.Pattern+"/") || 
+                       strings.HasPrefix(relPath, pattern.Pattern+"/") ||
+                       dirname == pattern.Pattern ||
+                       relPath == pattern.Pattern  // Match the directory name itself
+        }</span>
+
+        // Check each directory component with wildcards
+        <span class="cov0" title="0">dirs := strings.Split(dirname, "/")
+        for _, dir := range dirs </span><span class="cov0" title="0">{
+                if matched, err := filepath.Match(pattern.Pattern, dir); err == nil &amp;&amp; matched </span><span class="cov0" title="0">{
+                        return true
+                }</span>
+        }
+
+        <span class="cov0" title="0">return false</span>
+}
+
+// addToCache adds a result to the cache with memory management
+func (eim *EnhancedIgnoreManager) addToCache(path string, result bool) <span class="cov8" title="1">{
+        eim.cacheMutex.Lock()
+        defer eim.cacheMutex.Unlock()
+
+        // Memory management: check cache size
+        if len(eim.pathCache) &gt;= MaxPathCacheEntries </span><span class="cov8" title="1">{
+                // Simple eviction: clear oldest half of cache
+                // This is more predictable than LRU for our use case
+                eim.clearOldestCacheEntries()
+        }</span>
+
+        // Estimate memory usage (rough calculation)
+        <span class="cov8" title="1">entrySize := int64(len(path) + 1) // path + bool
+        if eim.cacheMemory+entrySize &gt; MaxCacheMemoryMB*1024*1024 </span><span class="cov0" title="0">{
+                eim.clearOldestCacheEntries()
+                eim.cacheMemory = 0 // Reset counter after clear
+        }</span>
+
+        <span class="cov8" title="1">eim.pathCache[path] = result
+        eim.cacheMemory += entrySize</span>
+}
+
+// clearOldestCacheEntries clears half the cache (simple eviction strategy)
+func (eim *EnhancedIgnoreManager) clearOldestCacheEntries() <span class="cov8" title="1">{
+        targetSize := len(eim.pathCache) / 2
+        count := 0
+        
+        // Clear entries until we reach target size
+        for path := range eim.pathCache </span><span class="cov8" title="1">{
+                delete(eim.pathCache, path)
+                count++
+                if count &gt;= targetSize </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+        
+        // Reset memory counter (rough estimate)
+        <span class="cov8" title="1">eim.cacheMemory = eim.cacheMemory / 2</span>
+}
+
+// ClearCache clears the entire cache (useful for testing or memory pressure)
+func (eim *EnhancedIgnoreManager) ClearCache() <span class="cov8" title="1">{
+        eim.cacheMutex.Lock()
+        defer eim.cacheMutex.Unlock()
+        
+        eim.pathCache = make(map[string]bool)
+        eim.cacheMemory = 0
+        eim.cacheHits = 0
+        eim.cacheMisses = 0
+}</span>
+
+// GetStats returns cache performance statistics
+func (eim *EnhancedIgnoreManager) GetStats() (hits, misses, total int64, hitRate float64) <span class="cov8" title="1">{
+        eim.cacheMutex.RLock()
+        defer eim.cacheMutex.RUnlock()
+        
+        hits = eim.cacheHits
+        misses = eim.cacheMisses
+        total = eim.totalChecks
+        
+        if total &gt; 0 </span><span class="cov8" title="1">{
+                hitRate = float64(hits) / float64(total) * 100
+        }</span>
+        
+        <span class="cov8" title="1">return</span>
+}
+
+// ReloadIgnoreFile reloads the ignore file (useful for dynamic updates)
+func (eim *EnhancedIgnoreManager) ReloadIgnoreFile() error <span class="cov8" title="1">{
+        // Clear existing patterns and cache
+        eim.patterns = nil
+        eim.ClearCache()
+        
+        // Reload from file
+        return eim.loadIgnoreFile()
+}</span>
+
+// GetPatternsCount returns the number of loaded patterns
+func (eim *EnhancedIgnoreManager) GetPatternsCount() int <span class="cov8" title="1">{
+        return len(eim.patterns)
+}</span>
+
+// EstimateMemoryUsage returns estimated memory usage in bytes
+func (eim *EnhancedIgnoreManager) EstimateMemoryUsage() int64 <span class="cov8" title="1">{
+        eim.cacheMutex.RLock()
+        defer eim.cacheMutex.RUnlock()
+        
+        // Rough calculation: patterns + cache
+        patternsMemory := int64(len(eim.patterns) * int(unsafe.Sizeof(IgnorePattern{})))
+        cacheMemory := eim.cacheMemory
+        
+        return patternsMemory + cacheMemory
+}</span>
+
+// Legacy compatibility methods (for drop-in replacement)
+
+// ShouldIgnoreFile determines if a file should be ignored
+func (eim *EnhancedIgnoreManager) ShouldIgnoreFile(path string) bool <span class="cov8" title="1">{
+        return eim.ShouldIgnore(path)
+}</span>
+
+// ShouldIgnoreDirectory determines if a directory should be ignored  
+func (eim *EnhancedIgnoreManager) ShouldIgnoreDirectory(path string) bool <span class="cov8" title="1">{
+        // For directories, append / to match directory patterns correctly
+        dirPath := path
+        if !strings.HasSuffix(dirPath, "/") </span><span class="cov8" title="1">{
+                dirPath += "/"
+        }</span>
+        <span class="cov8" title="1">return eim.ShouldIgnore(dirPath)</span>
+}</pre>
+		
+		<pre class="file" id="file3" style="display: none">package core
+
+import (
+        "errors"
+        "fmt"
+        "os"
+        "path/filepath"
+        
+        "github.com/deepakkumarnarayana/timemachine-cli/internal/config"
+)
+
+// AppState contains the application state and paths
+type AppState struct {
+        ProjectRoot   string          // Absolute path to project root (parent of .git)
+        GitDir        string          // Path to .git directory
+        ShadowRepoDir string          // Path to .git/timemachine_snapshots
+        IsInitialized bool            // Whether shadow repo exists and is valid
+        Config        *config.Config  // Application configuration
+        ConfigManager *config.Manager // Configuration manager
+}
+
+// NewAppState creates a new AppState by finding the Git repository
+// and checking if the shadow repository is initialized
+func NewAppState() (*AppState, error) <span class="cov8" title="1">{
+        // Get current working directory
+        cwd, err := os.Getwd()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get current working directory: %w", err)
+        }</span>
+
+        // Walk up directory tree looking for .git directory
+        <span class="cov8" title="1">gitDir := findGitDir(cwd)
+        if gitDir == "" </span><span class="cov8" title="1">{
+                return nil, errors.New("not in a Git repository (or any parent directory)")
+        }</span>
+
+        // Set ProjectRoot to parent of .git
+        <span class="cov8" title="1">projectRoot := filepath.Dir(gitDir)
+        
+        // Set ShadowRepoDir to .git/timemachine_snapshots
+        shadowRepoDir := filepath.Join(gitDir, "timemachine_snapshots")
+        
+        // Check if shadow repo exists by looking for HEAD file
+        headFile := filepath.Join(shadowRepoDir, "HEAD")
+        isInitialized := false
+        if _, err := os.Stat(headFile); err == nil </span><span class="cov8" title="1">{
+                isInitialized = true
+        }</span>
+
+        // Initialize configuration manager
+        <span class="cov8" title="1">configManager := config.NewManager()
+        
+        // Load configuration (don't fail if config doesn't exist)
+        if err := configManager.Load(projectRoot); err != nil </span><span class="cov0" title="0">{
+                // Log warning but continue - config is optional
+                fmt.Printf("Warning: failed to load configuration: %v\n", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;AppState{
+                ProjectRoot:   projectRoot,
+                GitDir:        gitDir,
+                ShadowRepoDir: shadowRepoDir,
+                IsInitialized: isInitialized,
+                Config:        configManager.Get(),
+                ConfigManager: configManager,
+        }, nil</span>
+}
+
+// NewAppStateWithConfig creates a new AppState with custom configuration
+// This is useful for testing or when configuration should be loaded differently
+func NewAppStateWithConfig(configManager *config.Manager) (*AppState, error) <span class="cov0" title="0">{
+        state, err := NewAppState()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        
+        // Override configuration
+        <span class="cov0" title="0">state.ConfigManager = configManager
+        state.Config = configManager.Get()
+        
+        return state, nil</span>
+}
+
+// findGitDir searches for a .git directory starting from the given directory
+// and walking up the directory tree until it finds one or reaches the filesystem root
+func findGitDir(startDir string) string <span class="cov8" title="1">{
+        currentDir := startDir
+        
+        for </span><span class="cov8" title="1">{
+                // Check for .git directory in current directory
+                gitPath := filepath.Join(currentDir, ".git")
+                
+                // Check if .git exists and is a directory (not a file, which could be a submodule)
+                if info, err := os.Stat(gitPath); err == nil &amp;&amp; info.IsDir() </span><span class="cov8" title="1">{
+                        return gitPath
+                }</span>
+                
+                // Move to parent directory
+                <span class="cov8" title="1">parentDir := filepath.Dir(currentDir)
+                
+                // Stop if we've reached the filesystem root
+                if parentDir == currentDir </span><span class="cov8" title="1">{
+                        break</span>
+                }
+                
+                <span class="cov8" title="1">currentDir = parentDir</span>
+        }
+        
+        // Not found
+        <span class="cov8" title="1">return ""</span>
+}</pre>
+		
+		<pre class="file" id="file4" style="display: none">package core
+
+import (
+        "fmt"
+        "os"
+        "path/filepath"
+        "sync"
+        "time"
+
+        "github.com/fatih/color"
+        "github.com/fsnotify/fsnotify"
+)
+
+// Watcher monitors file system changes and creates snapshots
+type Watcher struct {
+        fsWatcher     *fsnotify.Watcher
+        gitManager    *GitManager
+        debouncer     *Debouncer
+        stopChan      chan bool
+        wg            sync.WaitGroup
+        state         *AppState
+        ignoreManager *EnhancedIgnoreManager
+}
+
+// NewWatcher creates a new file system watcher
+func NewWatcher(state *AppState, gitManager *GitManager) (*Watcher, error) <span class="cov0" title="0">{
+        fsWatcher, err := fsnotify.NewWatcher()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create file watcher: %w", err)
+        }</span>
+
+        // Create debouncer using configured delay (defaults to 2s, optimal for bulk operations)
+        <span class="cov0" title="0">debounceDelay := 2000 * time.Millisecond // fallback default
+        if state.Config != nil </span><span class="cov0" title="0">{
+                debounceDelay = state.Config.Watcher.DebounceDelay
+        }</span>
+        <span class="cov0" title="0">debouncer := NewDebouncer(debounceDelay)
+
+        // Create enhanced ignore manager with .timemachine-ignore support
+        ignoreManager := NewEnhancedIgnoreManager(state.ProjectRoot)
+
+        return &amp;Watcher{
+                fsWatcher:     fsWatcher,
+                gitManager:    gitManager,
+                debouncer:     debouncer,
+                stopChan:      make(chan bool),
+                state:         state,
+                ignoreManager: ignoreManager,
+        }, nil</span>
+}
+
+// Start begins monitoring file changes
+func (w *Watcher) Start() error <span class="cov0" title="0">{
+        // Add project root and subdirectories to watch
+        if err := w.addDirectoryRecursive(w.state.ProjectRoot); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to add directories to watch: %w", err)
+        }</span>
+
+        // Create initial snapshot
+        <span class="cov0" title="0">fmt.Print("✅ Creating initial snapshot... ")
+        if err := w.gitManager.CreateWatcherSnapshot(); err != nil </span><span class="cov0" title="0">{
+                color.Red("❌")
+                return fmt.Errorf("failed to create initial snapshot: %w", err)
+        }</span>
+        <span class="cov0" title="0">color.Green("Done!")
+
+        // Start event loop
+        w.wg.Add(1)
+        go w.eventLoop()
+
+        // Print status
+        color.Green("🚀 Time Machine is watching for changes...")
+        fmt.Println("   Press Ctrl+C to stop")
+
+        return nil</span>
+}
+
+// Stop stops the file watcher
+func (w *Watcher) Stop() <span class="cov0" title="0">{
+        close(w.stopChan)
+        w.debouncer.Cancel()
+        w.fsWatcher.Close()
+        w.wg.Wait()
+}</span>
+
+// addDirectoryRecursive adds a directory and all its subdirectories to the watcher
+func (w *Watcher) addDirectoryRecursive(root string) error <span class="cov0" title="0">{
+        return filepath.Walk(root, func(path string, info os.FileInfo, err error) error </span><span class="cov0" title="0">{
+                if err != nil </span><span class="cov0" title="0">{
+                        // Skip directories we can't read
+                        return nil
+                }</span>
+
+                <span class="cov0" title="0">if !info.IsDir() </span><span class="cov0" title="0">{
+                        return nil
+                }</span>
+
+                // Skip ignored directories using new IgnoreManager
+                <span class="cov0" title="0">if w.ignoreManager.ShouldIgnoreDirectory(path) </span><span class="cov0" title="0">{
+                        return filepath.SkipDir
+                }</span>
+
+                // Add directory to watcher
+                <span class="cov0" title="0">if err := w.fsWatcher.Add(path); err != nil </span><span class="cov0" title="0">{
+                        // Log but don't fail - some directories might not be accessible
+                        fmt.Printf("Warning: couldn't watch directory %s: %v\n", path, err)
+                }</span>
+
+                <span class="cov0" title="0">return nil</span>
+        })
+}
+
+// shouldIgnoreDirectory checks if a directory should be ignored (DEPRECATED - use IgnoreManager)
+func (w *Watcher) shouldIgnoreDirectory(path string) bool <span class="cov0" title="0">{
+        // Delegate to new IgnoreManager for backward compatibility
+        return w.ignoreManager.ShouldIgnoreDirectory(path)
+}</span>
+
+// shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
+func (w *Watcher) shouldIgnoreFile(path string) bool <span class="cov0" title="0">{
+        // Delegate to new IgnoreManager for backward compatibility
+        return w.ignoreManager.ShouldIgnoreFile(path)
+}</span>
+
+// eventLoop processes file system events
+func (w *Watcher) eventLoop() <span class="cov0" title="0">{
+        defer w.wg.Done()
+
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case event, ok := &lt;-w.fsWatcher.Events:<span class="cov0" title="0">
+                        if !ok </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+
+                        <span class="cov0" title="0">w.handleEvent(event)</span>
+
+                case err, ok := &lt;-w.fsWatcher.Errors:<span class="cov0" title="0">
+                        if !ok </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                        <span class="cov0" title="0">fmt.Printf("File watcher error: %v\n", err)</span>
+
+                case &lt;-w.stopChan:<span class="cov0" title="0">
+                        return</span>
+                }
+        }
+}
+
+// handleEvent processes a single file system event
+func (w *Watcher) handleEvent(event fsnotify.Event) <span class="cov0" title="0">{
+        // Ignore if file should be ignored
+        if w.shouldIgnoreFile(event.Name) </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        // If a new directory was created, add it to watch list
+        <span class="cov0" title="0">if event.Op&amp;fsnotify.Create == fsnotify.Create </span><span class="cov0" title="0">{
+                if info, err := os.Stat(event.Name); err == nil &amp;&amp; info.IsDir() </span><span class="cov0" title="0">{
+                        if !w.ignoreManager.ShouldIgnoreDirectory(event.Name) </span><span class="cov0" title="0">{
+                                if err := w.addDirectoryRecursive(event.Name); err != nil </span><span class="cov0" title="0">{
+                                        fmt.Printf("Warning: couldn't watch new directory %s: %v\n", event.Name, err)
+                                }</span>
+                        }
+                }
+        }
+
+        // Debounce snapshot creation
+        <span class="cov0" title="0">w.debouncer.Trigger(w.createSnapshot)</span>
+}
+
+// createSnapshot creates a snapshot (called after debounce delay)
+func (w *Watcher) createSnapshot() <span class="cov0" title="0">{
+        fmt.Print("📸 Creating snapshot... ")
+        
+        if err := w.gitManager.CreateWatcherSnapshot(); err != nil </span><span class="cov0" title="0">{
+                color.Red("❌ Error: %v", err)
+                return
+        }</span>
+        
+        // Get latest snapshot for display
+        <span class="cov0" title="0">snapshots, err := w.gitManager.ListSnapshots(1, "")
+        if err == nil &amp;&amp; len(snapshots) &gt; 0 </span><span class="cov0" title="0">{
+                color.Green("✅ Done! (Latest: %s)", snapshots[0].Time)
+        }</span> else<span class="cov0" title="0"> {
+                color.Green("✅ Done!")
+        }</span>
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
