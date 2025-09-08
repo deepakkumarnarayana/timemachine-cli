@@ -196,7 +196,7 @@ jobs:
         go test -v -race -timeout=15m -run="TestSecurity" ./...
 
     - name: Install gosec
-      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
     - name: Run gosec security scanner
       run: |
@@ -335,7 +335,7 @@ jobs:
 
     - name: Install golangci-lint
       run: |
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.1
 
     - name: Run golangci-lint
       run: |

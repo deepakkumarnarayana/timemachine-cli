@@ -19,7 +19,7 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  GOLANGCI_LINT_VERSION: 'v1.54'
+  GOLANGCI_LINT_VERSION: 'v1.60.1'
 
 jobs:
   # Basic unit tests across multiple Go versions and OS
@@ -197,7 +197,7 @@ jobs:
         go test -v -run="TestFuzz" -timeout=10m ./internal/config/...
 
     - name: Install gosec
-      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
     - name: Run gosec security scan
       run: |
