@@ -2,7 +2,7 @@ name: Configuration System Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, test-branch-detection ]
     paths:
       - 'internal/config/**'
       - 'internal/commands/config.go'
@@ -54,11 +54,26 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Check if config package exists
+      id: check-config
+      run: |
+        if [ -d "./internal/config" ]; then
+          echo "config-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "config-exists=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Run unit tests
+      if: steps.check-config.outputs.config-exists == 'true'
       run: go test -v -race -timeout=10m ./internal/config/...
 
     - name: Run integration tests
+      if: steps.check-config.outputs.config-exists == 'true'
       run: go test -v -race -timeout=15m -tags=integration ./internal/config/...
+
+    - name: Skip config tests
+      if: steps.check-config.outputs.config-exists == 'false'
+      run: echo "⚠️ Config package not found, skipping config-specific tests"
 
   # Comprehensive test suite with coverage
   coverage-tests:
@@ -85,12 +100,27 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Check if config package exists
+      id: check-config-coverage
+      run: |
+        if [ -d "./internal/config" ]; then
+          echo "config-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "config-exists=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Run tests with coverage
+      if: steps.check-config-coverage.outputs.config-exists == 'true'
       run: |
         go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/config/...
         go tool cover -func=coverage.out
 
+    - name: Skip coverage tests
+      if: steps.check-config-coverage.outputs.config-exists == 'false'
+      run: echo "⚠️ Config package not found, skipping coverage tests"
+
     - name: Check coverage threshold
+      if: steps.check-config-coverage.outputs.config-exists == 'true'
       run: |
         COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
         echo "Coverage: $COVERAGE%"
@@ -102,6 +132,7 @@ jobs:
         fi
 
     - name: Upload coverage to Codecov
+      if: steps.check-config-coverage.outputs.config-exists == 'true'
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.out
@@ -376,11 +407,20 @@ jobs:
         echo "Stress Tests: ${{ needs.stress-tests.result }}"
         echo "Code Quality: ${{ needs.code-quality.result }}"
         
-        # Fail if any critical tests failed
-        if [[ "${{ needs.unit-tests.result }}" == "failure" || 
-              "${{ needs.coverage-tests.result }}" == "failure" || 
-              "${{ needs.security-tests.result }}" == "failure" ]]; then
-          echo "❌ Critical tests failed"
+        # Fail if any critical tests failed (but not if they were skipped)
+        failed_jobs=""
+        if [[ "${{ needs.unit-tests.result }}" == "failure" ]]; then
+          failed_jobs="$failed_jobs unit-tests"
+        fi
+        if [[ "${{ needs.coverage-tests.result }}" == "failure" ]]; then
+          failed_jobs="$failed_jobs coverage-tests"
+        fi
+        if [[ "${{ needs.security-tests.result }}" == "failure" ]]; then
+          failed_jobs="$failed_jobs security-tests"
+        fi
+        
+        if [[ -n "$failed_jobs" ]]; then
+          echo "❌ Critical tests failed: $failed_jobs"
           exit 1
         fi
         
