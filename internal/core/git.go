@@ -20,29 +20,32 @@ type GitManager struct {
 
 // Security validation patterns
 var (
-	// gitDirPattern validates git directory paths to prevent injection
-	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\-]+$`)
 	// gitHashPattern validates git commit hashes
 	gitHashPattern = regexp.MustCompile(`^[a-fA-F0-9]{4,40}$`)
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths
+// sanitizeGitPath validates and sanitizes git directory paths using Go's built-in security functions
 func sanitizeGitPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Clean the path to resolve . and .. elements
+	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
 
-	// Prevent path traversal attacks
-	if strings.Contains(cleaned, "..") {
-		return "", fmt.Errorf("path traversal not allowed")
+	// For absolute paths (system-internal paths like ShadowRepoDir), check basic security constraints
+	if filepath.IsAbs(cleaned) {
+		// Prevent path traversal in absolute paths by checking for suspicious components
+		if strings.Contains(cleaned, "..") {
+			return "", fmt.Errorf("path traversal not allowed in absolute path")
+		}
+		return cleaned, nil
 	}
 
-	// Validate against allowed characters (alphanumeric, dots, slashes, hyphens, underscores)
-	if !gitDirPattern.MatchString(cleaned) {
-		return "", fmt.Errorf("invalid characters in path")
+	// For relative paths (user inputs), use Go's built-in security validation (Go 1.20+)
+	// This handles cross-platform path traversal prevention automatically
+	if !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("path must be local and relative")
 	}
 
 	return cleaned, nil

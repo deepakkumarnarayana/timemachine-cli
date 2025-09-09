@@ -13,20 +13,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths using Go's built-in security functions
+// sanitizeGitPath validates and sanitizes git directory paths for user inputs using Go's built-in security functions
 func sanitizeGitPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Use Go's built-in security validation (Go 1.20+)
-	// This handles cross-platform path traversal prevention automatically
-	if !filepath.IsLocal(path) {
-		return "", fmt.Errorf("path must be local and relative")
-	}
-
 	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
+
+	// For user inputs, we only allow relative paths for security
+	// Use Go's built-in security validation (Go 1.20+)
+	// This handles cross-platform path traversal prevention automatically
+	if !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("path must be local and relative")
+	}
 
 	return cleaned, nil
 }
