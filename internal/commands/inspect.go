@@ -9,27 +9,14 @@ import (
 	"strings"
 
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/security"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths for user inputs using Go's built-in security functions
+// sanitizeGitPath validates and sanitizes git directory paths for user inputs using strict validation
 func sanitizeGitPath(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("empty path not allowed")
-	}
-
-	// Clean the path using OS-appropriate rules
-	cleaned := filepath.Clean(path)
-
-	// For user inputs, we only allow relative paths for security
-	// Use Go's built-in security validation (Go 1.20+)
-	// This handles cross-platform path traversal prevention automatically
-	if !filepath.IsLocal(cleaned) {
-		return "", fmt.Errorf("path must be local and relative")
-	}
-
-	return cleaned, nil
+	return security.SanitizeUserInputPath(path)
 }
 
 // validateGitHash ensures git hash is safe for use in commands
