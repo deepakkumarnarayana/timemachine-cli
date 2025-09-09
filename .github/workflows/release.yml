@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  build:
+    name: Build Cross-Platform Binaries
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: ''
+            name: 'timemachine-linux-amd64'
+          - goos: linux
+            goarch: arm64
+            suffix: ''
+            name: 'timemachine-linux-arm64'
+          - goos: darwin
+            goarch: amd64
+            suffix: ''
+            name: 'timemachine-macos-amd64'
+          - goos: darwin
+            goarch: arm64
+            suffix: ''
+            name: 'timemachine-macos-arm64'
+          - goos: windows
+            goarch: amd64
+            suffix: '.exe'
+            name: 'timemachine-windows-amd64.exe'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags "-X main.version=${{ steps.version.outputs.VERSION }} -s -w" \
+            -o dist/${{ matrix.name }} \
+            ./cmd/timemachine
+            
+      - name: Create checksum
+        run: |
+          cd dist
+          sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}
+            dist/${{ matrix.name }}.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          
+      - name: Flatten artifacts
+        run: |
+          find dist/ -name "timemachine-*" -type f -exec mv {} dist/ \;
+          ls -la dist/
+          
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat << EOF > release-notes.md
+          ## TimeMachine CLI ${{ steps.version.outputs.VERSION }}
+          
+          ### 🚀 Installation
+          
+          #### Quick Install (Linux/macOS)
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/deepakkumarnarayana/timemachine-cli/main/install.sh | bash
+          \`\`\`
+          
+          #### Manual Download
+          Download the appropriate binary for your platform:
+          
+          - **Linux (x64)**: \`timemachine-linux-amd64\`
+          - **Linux (ARM64)**: \`timemachine-linux-arm64\` 
+          - **macOS (Intel)**: \`timemachine-macos-amd64\`
+          - **macOS (Apple Silicon)**: \`timemachine-macos-arm64\`
+          - **Windows (x64)**: \`timemachine-windows-amd64.exe\`
+          
+          ### 📦 What's New
+          
+          - Cross-platform binaries for Linux, macOS, and Windows
+          - Automated releases with checksums for security
+          - Easy installation script for Linux and macOS
+          
+          ### 🔒 Verify Download
+          
+          All binaries include SHA256 checksums. Verify with:
+          \`\`\`bash
+          sha256sum -c timemachine-*.sha256
+          \`\`\`
+          
+          ### 🐧 Platform Support
+          
+          - **Linux**: ✅ Tested and fully supported
+          - **macOS**: 🔧 Available but not extensively tested
+          - **Windows**: 🔧 Available but not extensively tested
+          
+          ---
+          
+          **Full Changelog**: https://github.com/deepakkumarnarayana/timemachine-cli/commits/${{ steps.version.outputs.VERSION }}
+          EOF
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: TimeMachine CLI ${{ steps.version.outputs.VERSION }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/timemachine-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
