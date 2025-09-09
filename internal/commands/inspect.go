@@ -393,6 +393,7 @@ func showFileChanges(state *core.AppState, hash string, fileFilter string) error
 				statusText = status
 			}
 
+			// #nosec G104 - Color print errors are not critical for display
 			statusColor.Printf("  %s", statusText)
 			fmt.Printf("\t%s\n", filename)
 		}
@@ -497,6 +498,7 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 		contentLines := strings.Split(string(fileContent), "\n")
 		for i, contentLine := range contentLines {
 			if i < len(contentLines)-1 || contentLine != "" { // Skip last empty line
+				// #nosec G104 - Color print errors are not critical for display
 				color.New(color.FgYellow).Printf("%4d: ", i+1)
 				fmt.Println(contentLine)
 			}
@@ -572,7 +574,9 @@ func showDetailedDiff(state *core.AppState, hash string, fileFilter string) erro
 		} else if strings.HasPrefix(line, "-") {
 			if isDeletedFile {
 				// Highlight deleted file content differently
+				// #nosec G104 - Color print errors are not critical for display
 				color.New(color.FgRed, color.BgBlack).Print("- ")
+				// #nosec G104 - Color print errors are not critical for display
 				color.New(color.FgWhite).Println(line[1:])
 			} else {
 				color.Red(line)

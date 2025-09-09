@@ -44,6 +44,7 @@ func CountProjectFiles(rootPath string) (fileCount, dirCount int) {
 	// Use Enhanced IgnoreManager for consistent ignore logic
 	ignoreManager := core.NewEnhancedIgnoreManager(rootPath)
 
+	// #nosec G104 - Intentionally ignoring Walk errors to continue file counting
 	filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil

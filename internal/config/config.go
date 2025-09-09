@@ -187,6 +187,7 @@ func (m *Manager) setupEnvironmentVariables() {
 	// Bind only explicitly defined environment variables
 	// This ensures all values go through the normal validation pipeline
 	for env, key := range allowedEnvVars {
+		// #nosec G104 - BindEnv errors are not critical for config operation
 		m.viper.BindEnv(key, env)
 	}
 }

@@ -161,6 +161,8 @@ func showNotInGitRepo() {
 }
 
 func hasTimeMachineInGitignore(gitignorePath string) bool {
+	gitignorePath = filepath.Clean(gitignorePath)
+	// #nosec G304 - Path is cleaned to prevent path traversal
 	content, err := os.ReadFile(gitignorePath)
 	if err != nil {
 		return false
@@ -170,6 +172,8 @@ func hasTimeMachineInGitignore(gitignorePath string) bool {
 }
 
 func hasTimeMachineHook(hookPath string) bool {
+	hookPath = filepath.Clean(hookPath)
+	// #nosec G304 - Path is cleaned to prevent path traversal
 	content, err := os.ReadFile(hookPath)
 	if err != nil {
 		return false

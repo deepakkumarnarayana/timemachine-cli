@@ -79,6 +79,7 @@ func (w *Watcher) Start() error {
 func (w *Watcher) Stop() {
 	close(w.stopChan)
 	w.debouncer.Cancel()
+	// #nosec G104 - Intentionally ignoring Close error in cleanup
 	w.fsWatcher.Close()
 	w.wg.Wait()
 }

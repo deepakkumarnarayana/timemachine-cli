@@ -17,7 +17,8 @@ func MakeExecutable(path string) error {
 		// Windows doesn't use executable permissions
 		return nil
 	}
-	return os.Chmod(path, 0755)
+	// #nosec G302 - 0700 is appropriate for executable scripts (owner read/write/execute)
+	return os.Chmod(path, 0700)
 }
 
 // GetHookExtension returns the appropriate file extension for git hooks

@@ -358,7 +358,8 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 				if lastBranch == "" && !isInitialCommit {
 					lastBranch = "unknown" // Handle corrupted data
 				}
-				g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
+				// #nosec G104 - Metadata errors should not fail snapshot creation
+			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
 			}
 		}
 	}
@@ -369,7 +370,7 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 // InitializeShadowRepo creates and initializes the shadow repository
 func (g *GitManager) InitializeShadowRepo() error {
 	// Create .git/timemachine_snapshots directory
-	if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil {
+	if err := os.MkdirAll(g.State.ShadowRepoDir, 0750); err != nil {
 		return fmt.Errorf("failed to create shadow repo directory: %w", err)
 	}
 
@@ -399,7 +400,7 @@ func (g *GitManager) InitializeShadowRepo() error {
 // Use this + CreateSnapshot() instead of InitializeShadowRepo() to avoid redundant empty commits
 func (g *GitManager) SetupShadowRepo() error {
 	// Create .git/timemachine_snapshots directory
-	if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil {
+	if err := os.MkdirAll(g.State.ShadowRepoDir, 0750); err != nil {
 		return fmt.Errorf("failed to create shadow repo directory: %w", err)
 	}
 
@@ -578,6 +579,7 @@ func (g *GitManager) CreateSnapshot(message string) error {
 			if lastBranch == "" && !isInitialCommit {
 				lastBranch = "unknown" // Handle corrupted data
 			}
+			// #nosec G104 - Metadata errors should not fail snapshot creation
 			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
 		}
 	}
