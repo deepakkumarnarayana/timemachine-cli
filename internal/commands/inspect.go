@@ -15,25 +15,28 @@ import (
 
 // Security validation patterns
 var (
-	// gitDirPattern validates git directory paths to prevent injection
-	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\-]+$`)
+	// gitDirPattern validates git directory paths to prevent injection (cross-platform)
+	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\\:\-\s]+$`)
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths
+// sanitizeGitPath validates and sanitizes git directory paths (cross-platform)
 func sanitizeGitPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Clean the path to resolve . and .. elements
+	// Clean the path to resolve . and .. elements (cross-platform)
 	cleaned := filepath.Clean(path)
 
-	// Prevent path traversal attacks
-	if strings.Contains(cleaned, "..") {
+	// Convert to normalized form for consistent checking
+	normalized := filepath.ToSlash(cleaned)
+
+	// Prevent path traversal attacks (check after normalization)
+	if strings.Contains(normalized, "..") {
 		return "", fmt.Errorf("path traversal not allowed")
 	}
 
-	// Validate against allowed characters (alphanumeric, dots, slashes, hyphens, underscores)
+	// Validate against allowed characters (cross-platform: includes backslashes and colons)
 	if !gitDirPattern.MatchString(cleaned) {
 		return "", fmt.Errorf("invalid characters in path")
 	}
@@ -130,7 +133,7 @@ Examples:
   timemachine inspect --verbose         # Show comprehensive analysis
   timemachine inspect --search-all --file=main.go  # Search all snapshots for changes to main.go`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInspect(cmd, args, showDiff, showStats, fileFilter, verbose, searchAll)
+			return runInspect(args, showDiff, showStats, fileFilter, verbose, searchAll)
 		},
 	}
 
@@ -143,7 +146,7 @@ Examples:
 	return cmd
 }
 
-func runInspect(cmd *cobra.Command, args []string, showDiff, showStats bool, fileFilter string, verbose, searchAll bool) error {
+func runInspect(args []string, showDiff, showStats bool, fileFilter string, verbose, searchAll bool) error {
 	// Validate and sanitize file filter input
 	sanitizedFileFilter, err := sanitizeFilePath(fileFilter)
 	if err != nil {
