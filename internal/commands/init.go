@@ -110,8 +110,7 @@ func updateGitignore(projectRoot string) error {
 	var timemachineFound bool
 
 	gitignorePath = filepath.Clean(gitignorePath)
-	// #nosec G304 - Path is cleaned to prevent path traversal
-	if file, err := os.Open(gitignorePath); err == nil {
+	if file, err := os.Open(gitignorePath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
 		defer file.Close()
 		scanner := bufio.NewScanner(file)
 
@@ -145,8 +144,7 @@ func updateGitignore(projectRoot string) error {
 	}
 
 	// Write updated .gitignore
-	// #nosec G304 - Path is validated above for security
-	file, err := os.Create(gitignorePath)
+	file, err := os.Create(gitignorePath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
@@ -221,8 +219,7 @@ func createDefaultTimemachineIgnore(projectRoot string) error {
 	}
 
 	// Create the file
-	// #nosec G304 - Path is validated above for security
-	file, err := os.Create(ignorePath)
+	file, err := os.Create(ignorePath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create .timemachine-ignore: %w", err)
 	}
@@ -271,8 +268,7 @@ func installUnixHook(hooksDir string) error {
 	var existingContent []string
 	var timemachineFound bool
 
-	// #nosec G304 - Path is validated above for security
-	if file, err := os.Open(hookPath); err == nil {
+	if file, err := os.Open(hookPath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
 		defer file.Close()
 		scanner := bufio.NewScanner(file)
 
@@ -308,8 +304,7 @@ func installUnixHook(hooksDir string) error {
 	}
 
 	// Create or update the hook
-	// #nosec G304 - Path is validated above for security
-	file, err := os.Create(hookPath)
+	file, err := os.Create(hookPath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create hook file: %w", err)
 	}
@@ -356,8 +351,7 @@ func installWindowsHook(hooksDir string) error {
 
 	// Check if Windows hook already exists
 	if _, err := os.Stat(hookPath); err == nil {
-		// #nosec G304 - Path is cleaned above for security  
-		content, err := os.ReadFile(hookPath)
+		content, err := os.ReadFile(hookPath) // #nosec G304 - Path is cleaned to prevent path traversal
 		if err == nil && strings.Contains(string(content), "timemachine clean") {
 			return nil // Already exists
 		}
