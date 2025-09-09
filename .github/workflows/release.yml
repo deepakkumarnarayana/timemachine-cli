@@ -14,6 +14,11 @@ on:
 env:
   GO_VERSION: '1.24'
 
+# Security: Limit permissions
+permissions:
+  contents: write  # Needed to create releases
+  actions: read    # Needed to read workflow artifacts
+
 jobs:
   build:
     name: Build Cross-Platform Binaries
@@ -56,9 +61,21 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            # Validate user input tag format for security
+            TAG="${{ github.event.inputs.tag }}"
+            if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+              echo "ERROR: Invalid tag format. Expected format: v1.2.3 or v1.2.3-alpha"
+              exit 1
+            fi
+            echo "VERSION=$TAG" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            # Validate Git ref format
+            VERSION="${GITHUB_REF#refs/tags/}"
+            if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+              echo "ERROR: Invalid tag format. Expected format: v1.2.3 or v1.2.3-alpha"
+              exit 1
+            fi
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           fi
           
       - name: Build binary
@@ -97,9 +114,21 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            # Validate user input tag format for security
+            TAG="${{ github.event.inputs.tag }}"
+            if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+              echo "ERROR: Invalid tag format. Expected format: v1.2.3 or v1.2.3-alpha"
+              exit 1
+            fi
+            echo "VERSION=$TAG" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            # Validate Git ref format
+            VERSION="${GITHUB_REF#refs/tags/}"
+            if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+              echo "ERROR: Invalid tag format. Expected format: v1.2.3 or v1.2.3-alpha"
+              exit 1
+            fi
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           fi
           
       - name: Download all artifacts

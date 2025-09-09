@@ -83,14 +83,33 @@ detect_platform() {
     PLATFORM="${OS}-${ARCH}"
 }
 
+# Validate version format (e.g., v1.2.3)
+validate_version() {
+    local version="$1"
+    # Allow only alphanumeric, dots, and hyphens in version strings
+    if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+        return 1
+    fi
+    return 0
+}
+
 # Get latest release version
 get_latest_version() {
     print_status "Fetching latest release information..."
     
+    # Use secure TLS and validate response
     if command -v curl >/dev/null 2>&1; then
-        VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+        VERSION=$(curl -s --max-time 30 --fail \
+            "https://api.github.com/repos/$REPO/releases/latest" | \
+            grep '"tag_name":' | \
+            sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
+            head -n 1)
     elif command -v wget >/dev/null 2>&1; then
-        VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+        VERSION=$(wget -qO- --timeout=30 --secure-protocol=TLSv1_2 \
+            "https://api.github.com/repos/$REPO/releases/latest" | \
+            grep '"tag_name":' | \
+            sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
+            head -n 1)
     else
         print_error "Neither curl nor wget is available. Please install one of them."
     fi
@@ -99,7 +118,22 @@ get_latest_version() {
         print_error "Failed to get latest release version"
     fi
     
+    # Validate version format for security
+    if ! validate_version "$VERSION"; then
+        print_error "Invalid version format received: $VERSION"
+    fi
+    
     print_status "Latest version: $VERSION"
+}
+
+# Validate URL safety
+validate_url() {
+    local url="$1"
+    # Ensure URL is from GitHub releases only
+    if ! echo "$url" | grep -qE '^https://github\.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/releases/download/v[0-9]+\.[0-9]+\.[0-9]+'; then
+        return 1
+    fi
+    return 0
 }
 
 # Download and install binary
@@ -107,19 +141,42 @@ download_and_install() {
     BINARY_URL="https://github.com/$REPO/releases/download/$VERSION/timemachine-$PLATFORM"
     CHECKSUM_URL="https://github.com/$REPO/releases/download/$VERSION/timemachine-$PLATFORM.sha256"
     
-    TEMP_DIR=$(mktemp -d)
+    # Validate URLs for security
+    if ! validate_url "$BINARY_URL" || ! validate_url "$CHECKSUM_URL"; then
+        print_error "Invalid or unsafe download URLs"
+    fi
+    
+    # Create secure temporary directory
+    TEMP_DIR=$(mktemp -d -t timemachine-install.XXXXXX)
+    if [ ! -d "$TEMP_DIR" ]; then
+        print_error "Failed to create secure temporary directory"
+    fi
+    
+    # Set restrictive permissions
+    chmod 700 "$TEMP_DIR"
+    
     BINARY_PATH="$TEMP_DIR/timemachine-$PLATFORM"
     CHECKSUM_PATH="$TEMP_DIR/timemachine-$PLATFORM.sha256"
     
     print_status "Downloading TimeMachine CLI $VERSION for $PLATFORM..."
     
-    # Download binary
+    # Download binary with security measures
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$BINARY_URL" -o "$BINARY_PATH" || print_error "Failed to download binary"
-        curl -fsSL "$CHECKSUM_URL" -o "$CHECKSUM_PATH" || print_error "Failed to download checksum"
+        # Use secure curl options
+        curl -fsSL --max-time 300 --max-filesize 50000000 \
+             --proto '=https' --tlsv1.2 \
+             "$BINARY_URL" -o "$BINARY_PATH" || print_error "Failed to download binary"
+        curl -fsSL --max-time 30 --max-filesize 1000 \
+             --proto '=https' --tlsv1.2 \
+             "$CHECKSUM_URL" -o "$CHECKSUM_PATH" || print_error "Failed to download checksum"
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$BINARY_URL" -O "$BINARY_PATH" || print_error "Failed to download binary"
-        wget -q "$CHECKSUM_URL" -O "$CHECKSUM_PATH" || print_error "Failed to download checksum"
+        # Use secure wget options  
+        wget -q --timeout=300 --secure-protocol=TLSv1_2 --https-only \
+             --max-redirect=3 --quota=50M \
+             "$BINARY_URL" -O "$BINARY_PATH" || print_error "Failed to download binary"
+        wget -q --timeout=30 --secure-protocol=TLSv1_2 --https-only \
+             --max-redirect=3 --quota=1K \
+             "$CHECKSUM_URL" -O "$CHECKSUM_PATH" || print_error "Failed to download checksum"
     fi
     
     # Verify checksum

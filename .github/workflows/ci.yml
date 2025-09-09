@@ -207,7 +207,7 @@ jobs:
     - name: Run gosec security scanner
       run: |
         echo "🛡️ Running gosec security analysis..."
-        gosec -fmt=json -out=gosec-report.json -stdout ./...
+        gosec -conf=.gosec.json -fmt=json -out=gosec-report.json -stdout ./...
         
     - name: Upload security scan results
       uses: actions/upload-artifact@v4
