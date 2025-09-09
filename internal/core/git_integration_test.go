@@ -18,7 +18,7 @@ func TestCompleteAIWorkflow(t *testing.T) {
 	// Simulate AI development workflow:
 	// 1. Start with working code
 	// 2. AI makes changes
-	// 3. Code breaks  
+	// 3. Code breaks
 	// 4. Restore from snapshot
 
 	// Step 1: Create working application files
@@ -344,7 +344,7 @@ func add(a, b int) int {
 		t.Errorf("Expected at least 3 snapshots, got %d", len(allSnapshots))
 	}
 
-	t.Logf("✅ Branch workflow completed: %d total snapshots, %d branch switches detected", 
+	t.Logf("✅ Branch workflow completed: %d total snapshots, %d branch switches detected",
 		len(allSnapshots), branchSwitchCount)
 }
 
@@ -360,10 +360,10 @@ func TestLongRunningSession(t *testing.T) {
 	branches := []string{"main", "feature/auth", "feature/api", "bugfix/crash", "main"}
 
 	snapshotCount := 0
-	
+
 	for i := 0; i < sessionSnapshots; i++ {
 		// Occasionally switch branches
-		if i > 0 && i % 4 == 0 {
+		if i > 0 && i%4 == 0 {
 			branchIndex := i / 4
 			if branchIndex < len(branches) {
 				targetBranch := branches[branchIndex]
@@ -383,16 +383,16 @@ func TestLongRunningSession(t *testing.T) {
 		}
 
 		// Make a change
-		content := fmt.Sprintf("Session snapshot %d\nTimestamp: %s\nIteration: %d\n", 
+		content := fmt.Sprintf("Session snapshot %d\nTimestamp: %s\nIteration: %d\n",
 			i+1, time.Now().Format(time.RFC3339), i)
-		
+
 		if err := os.WriteFile(baseFile, []byte(content), 0644); err != nil {
 			t.Fatalf("Failed to write session file %d: %v", i, err)
 		}
 
 		// Create snapshot
 		message := fmt.Sprintf("Session work - iteration %d", i+1)
-		if i % 5 == 0 {
+		if i%5 == 0 {
 			message = fmt.Sprintf("Major milestone - iteration %d", i+1)
 		}
 
@@ -402,13 +402,13 @@ func TestLongRunningSession(t *testing.T) {
 		}
 
 		snapshotCount++
-		
+
 		// Short delay to ensure different timestamps
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Verify all snapshots were created
-	allSnapshots, err := gitManager.ListSnapshots(sessionSnapshots + 5, "")
+	allSnapshots, err := gitManager.ListSnapshots(sessionSnapshots+5, "")
 	if err != nil {
 		t.Fatalf("Failed to list session snapshots: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestLongRunningSession(t *testing.T) {
 		}
 	}
 
-	t.Logf("✅ Long session completed: %d snapshots, %d switches, %d milestones", 
+	t.Logf("✅ Long session completed: %d snapshots, %d switches, %d milestones",
 		len(allSnapshots), switchCount, milestoneCount)
 
 	// Test cleanup - list only recent snapshots
@@ -510,7 +510,7 @@ func TestErrorRecoveryWorkflow(t *testing.T) {
 		t.Logf("Could not remove large file: %v", err)
 	}
 
-	// Create a new snapshot - should handle missing files gracefully  
+	// Create a new snapshot - should handle missing files gracefully
 	newFile := filepath.Join(tempDir, "recovery.txt")
 	if err := os.WriteFile(newFile, []byte("recovery content"), 0644); err != nil {
 		t.Fatalf("Failed to create recovery file: %v", err)

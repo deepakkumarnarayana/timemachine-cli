@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // ShowCmd creates the show command
@@ -58,11 +58,11 @@ func runShow(hash string) error {
 	// Display the information with nice formatting
 	fmt.Printf("📸 Snapshot Details\n")
 	fmt.Println()
-	
+
 	// Parse and format the git show output
 	lines := strings.Split(commitInfo, "\n")
 	inFileList := false
-	
+
 	for _, line := range lines {
 		// Handle commit info section
 		if strings.HasPrefix(line, "commit ") {
@@ -78,11 +78,11 @@ func runShow(hash string) error {
 		} else if line == "" && !inFileList {
 			// Empty line before commit message
 			fmt.Println()
-		} else if !inFileList && !strings.HasPrefix(line, "commit ") && 
-				  !strings.HasPrefix(line, "Author") && 
-				  !strings.HasPrefix(line, "Commit") && 
-				  !strings.HasPrefix(line, "    ") && 
-				  line != "" {
+		} else if !inFileList && !strings.HasPrefix(line, "commit ") &&
+			!strings.HasPrefix(line, "Author") &&
+			!strings.HasPrefix(line, "Commit") &&
+			!strings.HasPrefix(line, "    ") &&
+			line != "" {
 			// This is likely the start of file status
 			inFileList = true
 			fmt.Println()
@@ -102,7 +102,7 @@ func runShow(hash string) error {
 			}
 		}
 	}
-	
+
 	fmt.Println()
 	fmt.Printf("Use 'timemachine restore %s' to restore this snapshot\n", hash)
 
@@ -114,15 +114,15 @@ func formatFileStatus(line string) {
 	if line == "" {
 		return
 	}
-	
+
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		return
 	}
-	
+
 	status := parts[0]
 	filename := strings.Join(parts[1:], " ")
-	
+
 	switch status {
 	case "A":
 		color.Green("  + %s (added)", filename)

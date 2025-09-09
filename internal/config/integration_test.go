@@ -14,7 +14,7 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 	tempDir := t.TempDir()
 	projectRoot := filepath.Join(tempDir, "project")
 	userConfigDir := filepath.Join(tempDir, "user_config", "timemachine")
-	
+
 	if err := os.MkdirAll(projectRoot, 0755); err != nil {
 		t.Fatalf("Failed to create project dir: %v", err)
 	}
@@ -24,24 +24,24 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 
 	t.Run("Create Default Configuration", func(t *testing.T) {
 		manager := NewManager()
-		
+
 		// Test creating default config in project
 		err := manager.CreateDefaultConfigFile(projectRoot)
 		if err != nil {
 			t.Errorf("Failed to create default config: %v", err)
 		}
-		
+
 		// Verify file exists and has correct permissions
 		configPath := filepath.Join(projectRoot, "timemachine.yaml")
 		info, err := os.Stat(configPath)
 		if err != nil {
 			t.Errorf("Config file not created: %v", err)
 		}
-		
+
 		if info.Mode().Perm() != 0600 {
 			t.Errorf("Config file has wrong permissions: %o", info.Mode().Perm())
 		}
-		
+
 		// Try creating again (should fail without force)
 		err = manager.CreateDefaultConfigFile(projectRoot)
 		if err == nil {
@@ -51,19 +51,19 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 
 	t.Run("Load Configuration with Defaults", func(t *testing.T) {
 		manager := NewManager()
-		
+
 		err := manager.Load(projectRoot)
 		if err != nil {
 			t.Errorf("Failed to load config: %v", err)
 		}
-		
+
 		config := manager.Get()
-		
+
 		// Verify default values are loaded correctly
 		if config.Log.Level != "info" {
 			t.Errorf("Wrong default log level: %s", config.Log.Level)
 		}
-		
+
 		if config.Watcher.DebounceDelay != 2*time.Second {
 			t.Errorf("Wrong default debounce delay: %v", config.Watcher.DebounceDelay)
 		}
@@ -77,13 +77,13 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 			"TIMEMACHINE_WATCHER_DEBOUNCE":  "5s",
 			"TIMEMACHINE_CACHE_MAX_ENTRIES": "25000",
 		}
-		
+
 		// Save and set env vars
 		for key, value := range testEnvs {
 			originalEnvs[key] = os.Getenv(key)
 			os.Setenv(key, value)
 		}
-		
+
 		// Restore env vars after test
 		defer func() {
 			for key, originalValue := range originalEnvs {
@@ -94,24 +94,24 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 				}
 			}
 		}()
-		
+
 		manager := NewManager()
 		err := manager.Load(projectRoot)
 		if err != nil {
 			t.Errorf("Failed to load config with env vars: %v", err)
 		}
-		
+
 		config := manager.Get()
-		
+
 		// Verify environment variable overrides work
 		if config.Log.Level != "debug" {
 			t.Errorf("Env var override failed: expected 'debug', got '%s'", config.Log.Level)
 		}
-		
+
 		if config.Watcher.DebounceDelay != 5*time.Second {
 			t.Errorf("Env var override failed: expected 5s, got %v", config.Watcher.DebounceDelay)
 		}
-		
+
 		if config.Cache.MaxEntries != 25000 {
 			t.Errorf("Env var override failed: expected 25000, got %d", config.Cache.MaxEntries)
 		}
@@ -131,7 +131,7 @@ watcher:
 		if err != nil {
 			t.Fatalf("Failed to write project config: %v", err)
 		}
-		
+
 		// Create user config (lower precedence)
 		userConfig := `
 log:
@@ -145,29 +145,29 @@ ui:
 		if err != nil {
 			t.Fatalf("Failed to write user config: %v", err)
 		}
-		
+
 		// Skip user config test for now as it requires complex OS-specific setup
 		// In a real implementation, we'd mock the viper config paths
 		t.Skip("Skipping user config precedence test - requires mocking viper config paths")
-		
+
 		manager := NewManager()
 		err = manager.Load(projectRoot)
 		if err != nil {
 			t.Errorf("Failed to load config with file precedence: %v", err)
 		}
-		
+
 		config := manager.Get()
-		
+
 		// Project config should override user config
 		if config.Log.Level != "warn" {
 			t.Errorf("Project config precedence failed: expected 'warn', got '%s'", config.Log.Level)
 		}
-		
+
 		// Project config should override user config
 		if config.Log.Format != "json" {
 			t.Errorf("Project config precedence failed: expected 'json', got '%s'", config.Log.Format)
 		}
-		
+
 		// User config should apply for unspecified values
 		if config.UI.Pager != "always" {
 			t.Errorf("User config merge failed: expected 'always', got '%s'", config.UI.Pager)
@@ -192,15 +192,15 @@ git:
 		if err != nil {
 			t.Fatalf("Failed to write invalid config: %v", err)
 		}
-		
+
 		manager := NewManager()
 		err = manager.Load(projectRoot)
-		
+
 		// Should fail validation
 		if err == nil {
 			t.Error("Should have failed validation with invalid config")
 		}
-		
+
 		// Error should contain all validation issues
 		errorStr := err.Error()
 		expectedErrors := []string{
@@ -209,7 +209,7 @@ git:
 			"max_entries must be at least 1000",
 			"cleanup_threshold must be less than max_commits",
 		}
-		
+
 		for _, expectedError := range expectedErrors {
 			if !strings.Contains(errorStr, expectedError) {
 				t.Errorf("Expected error to contain '%s', got: %s", expectedError, errorStr)
@@ -251,12 +251,12 @@ func TestIntegrationConfigValidatorEdgeCases(t *testing.T) {
 				TableFormat:        "table",
 			},
 		}
-		
+
 		err := validator.Validate(config)
 		if err == nil {
 			t.Error("Should have failed cross-section validation")
 		}
-		
+
 		if !strings.Contains(err.Error(), "cleanup_threshold must be less than max_commits") {
 			t.Errorf("Expected cross-section validation error, got: %v", err)
 		}
@@ -278,11 +278,11 @@ func TestIntegrationConfigValidatorEdgeCases(t *testing.T) {
 			{"/etc/passwd", false, "unsafe absolute path"},
 			{"/root/.ssh/id_rsa", false, "unsafe root path"},
 		}
-		
+
 		for _, tc := range testCases {
 			result := validator.isValidFilePath(tc.path)
 			if result != tc.expected {
-				t.Errorf("Path validation '%s' (%s): expected %v, got %v", 
+				t.Errorf("Path validation '%s' (%s): expected %v, got %v",
 					tc.path, tc.desc, tc.expected, result)
 			}
 		}
@@ -322,7 +322,7 @@ func TestIntegrationConfigValidatorEdgeCases(t *testing.T) {
 				TableFormat:        "yaml",
 			},
 		}
-		
+
 		err := validator.Validate(config)
 		if err != nil {
 			t.Errorf("Valid complex config should pass validation, got: %v", err)
@@ -334,7 +334,7 @@ func TestIntegrationConfigValidatorEdgeCases(t *testing.T) {
 func TestIntegrationConfigManagerConcurrency(t *testing.T) {
 	tempDir := t.TempDir()
 	projectRoot := filepath.Join(tempDir, "project")
-	
+
 	if err := os.MkdirAll(projectRoot, 0755); err != nil {
 		t.Fatalf("Failed to create project dir: %v", err)
 	}
@@ -357,7 +357,7 @@ watcher:
 	t.Run("Concurrent Config Loading", func(t *testing.T) {
 		numGoroutines := 50
 		errors := make(chan error, numGoroutines)
-		
+
 		// Load configuration concurrently
 		for i := 0; i < numGoroutines; i++ {
 			go func(id int) {
@@ -367,17 +367,17 @@ watcher:
 					errors <- err
 					return
 				}
-				
+
 				config := manager.Get()
 				if config.Log.Level != "info" {
 					errors <- nil // Success but with error checking
 					return
 				}
-				
+
 				errors <- nil // Success
 			}(i)
 		}
-		
+
 		// Collect results
 		for i := 0; i < numGoroutines; i++ {
 			if err := <-errors; err != nil {
@@ -390,7 +390,7 @@ watcher:
 		validator := NewValidator()
 		numGoroutines := 100
 		errors := make(chan error, numGoroutines)
-		
+
 		// Test various configs concurrently
 		configs := []*Config{
 			{
@@ -416,7 +416,7 @@ watcher:
 			},
 			// Add more test configs as needed
 		}
-		
+
 		for i := 0; i < numGoroutines; i++ {
 			go func(id int) {
 				config := configs[id%len(configs)]
@@ -424,7 +424,7 @@ watcher:
 				errors <- err
 			}(i)
 		}
-		
+
 		// Collect results
 		for i := 0; i < numGoroutines; i++ {
 			if err := <-errors; err != nil {
@@ -438,7 +438,7 @@ watcher:
 func TestIntegrationConfigErrorRecovery(t *testing.T) {
 	tempDir := t.TempDir()
 	projectRoot := filepath.Join(tempDir, "project")
-	
+
 	if err := os.MkdirAll(projectRoot, 0755); err != nil {
 		t.Fatalf("Failed to create project dir: %v", err)
 	}
@@ -451,18 +451,18 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to write corrupted config: %v", err)
 		}
-		
+
 		manager := NewManager()
 		err = manager.Load(projectRoot)
-		
+
 		// Should fail gracefully with proper error
 		if err == nil {
 			t.Error("Should have failed to load corrupted config")
 		}
-		
+
 		// Error should be informative
 		if !strings.Contains(err.Error(), "failed to read config file") &&
-		   !strings.Contains(err.Error(), "failed to unmarshal config") {
+			!strings.Contains(err.Error(), "failed to unmarshal config") {
 			t.Errorf("Expected config file error, got: %v", err)
 		}
 	})
@@ -472,7 +472,7 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 		if os.Getenv("RUNNER_OS") == "Windows" {
 			t.Skip("Skipping permission test on Windows")
 		}
-		
+
 		// Create config file with no read permissions
 		restrictedConfig := "log:\n  level: info"
 		configPath := filepath.Join(projectRoot, "timemachine.yaml")
@@ -480,13 +480,13 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to write restricted config: %v", err)
 		}
-		
+
 		// Restore permissions for cleanup
 		defer os.Chmod(configPath, 0600)
-		
+
 		manager := NewManager()
 		err = manager.Load(projectRoot)
-		
+
 		// Should fail gracefully (but might not on all systems due to different permission models)
 		if err == nil {
 			t.Log("Note: Permission restriction may not work on all filesystems")
@@ -497,15 +497,15 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 
 	t.Run("Missing Directory Handling", func(t *testing.T) {
 		nonExistentPath := filepath.Join(tempDir, "nonexistent")
-		
+
 		manager := NewManager()
 		err := manager.Load(nonExistentPath)
-		
+
 		// Should not error (should use defaults when no config file exists)
 		if err != nil {
 			t.Errorf("Should handle missing directory gracefully: %v", err)
 		}
-		
+
 		// Should have default values
 		config := manager.Get()
 		if config.Log.Level != "info" {

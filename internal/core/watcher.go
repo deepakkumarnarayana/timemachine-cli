@@ -172,12 +172,12 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 // createSnapshot creates a snapshot (called after debounce delay)
 func (w *Watcher) createSnapshot() {
 	fmt.Print("📸 Creating snapshot... ")
-	
+
 	if err := w.gitManager.CreateWatcherSnapshot(); err != nil {
 		color.Red("❌ Error: %v", err)
 		return
 	}
-	
+
 	// Get latest snapshot for display
 	snapshots, err := w.gitManager.ListSnapshots(1, "")
 	if err == nil && len(snapshots) > 0 {

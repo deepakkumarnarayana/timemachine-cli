@@ -1,3 +1,4 @@
+//go:build test
 // +build test
 
 package config
@@ -32,7 +33,7 @@ func (tu *TestUtilities) CreateTempDir(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	
+
 	tu.tempDirs = append(tu.tempDirs, tempDir)
 	return tempDir
 }
@@ -61,7 +62,7 @@ func (tu *TestUtilities) RestoreEnvVars() {
 func (tu *TestUtilities) Cleanup() {
 	// Restore environment variables
 	tu.RestoreEnvVars()
-	
+
 	// Remove temporary directories
 	for _, dir := range tu.tempDirs {
 		os.RemoveAll(dir)
@@ -168,7 +169,7 @@ ui:
 // LargeTestConfig returns a configuration with many entries
 func (tu *TestUtilities) LargeTestConfig(numPatterns int) string {
 	var configBuilder strings.Builder
-	
+
 	configBuilder.WriteString(`
 log:
   level: info
@@ -179,12 +180,12 @@ watcher:
   max_watched_files: 100000
   ignore_patterns:
 `)
-	
+
 	// Add many ignore patterns
 	for i := 0; i < numPatterns; i++ {
 		configBuilder.WriteString(fmt.Sprintf("    - \"pattern_%d_*.tmp\"\n", i))
 	}
-	
+
 	configBuilder.WriteString(`
   batch_size: 100
   enable_recursive: true
@@ -202,19 +203,19 @@ ui:
   pager: auto
   table_format: table
 `)
-	
+
 	return configBuilder.String()
 }
 
 // GenerateRandomConfig creates a random configuration for testing
 func (tu *TestUtilities) GenerateRandomConfig(seed int64) *Config {
 	rand.Seed(seed)
-	
+
 	logLevels := []string{"debug", "info", "warn", "error"}
 	logFormats := []string{"text", "json"}
 	pagerSettings := []string{"auto", "always", "never"}
 	tableFormats := []string{"table", "json", "yaml"}
-	
+
 	return &Config{
 		Log: LogConfig{
 			Level:  logLevels[rand.Intn(len(logLevels))],
@@ -223,13 +224,13 @@ func (tu *TestUtilities) GenerateRandomConfig(seed int64) *Config {
 		},
 		Watcher: WatcherConfig{
 			DebounceDelay:   time.Duration(rand.Intn(9000)+1000) * time.Millisecond, // 1-10s
-			MaxWatchedFiles: rand.Intn(900000) + 100000,                            // 100k-1M
-			BatchSize:       rand.Intn(900) + 100,                                  // 100-1000
+			MaxWatchedFiles: rand.Intn(900000) + 100000,                             // 100k-1M
+			BatchSize:       rand.Intn(900) + 100,                                   // 100-1000
 			EnableRecursive: rand.Float32() < 0.5,
 		},
 		Cache: CacheConfig{
-			MaxEntries:  rand.Intn(90000) + 10000,     // 10k-100k
-			MaxMemoryMB: rand.Intn(1000) + 24,         // 24-1024MB
+			MaxEntries:  rand.Intn(90000) + 10000,                   // 10k-100k
+			MaxMemoryMB: rand.Intn(1000) + 24,                       // 24-1024MB
 			TTL:         time.Duration(rand.Intn(23)+1) * time.Hour, // 1-24h
 			EnableLRU:   rand.Float32() < 0.5,
 		},
@@ -242,8 +243,8 @@ func (tu *TestUtilities) GenerateRandomConfig(seed int64) *Config {
 		UI: UIConfig{
 			ProgressIndicators: rand.Float32() < 0.5,
 			ColorOutput:        rand.Float32() < 0.5,
-			Pager:             pagerSettings[rand.Intn(len(pagerSettings))],
-			TableFormat:       tableFormats[rand.Intn(len(tableFormats))],
+			Pager:              pagerSettings[rand.Intn(len(pagerSettings))],
+			TableFormat:        tableFormats[rand.Intn(len(tableFormats))],
 		},
 	}
 }
@@ -253,7 +254,7 @@ func (tu *TestUtilities) generateRandomPath() string {
 	if rand.Float32() < 0.3 { // 30% empty
 		return ""
 	}
-	
+
 	safePaths := []string{
 		"/tmp/test.log",
 		"/var/log/app.log",
@@ -261,7 +262,7 @@ func (tu *TestUtilities) generateRandomPath() string {
 		"relative/path.log",
 		"./local.log",
 	}
-	
+
 	return safePaths[rand.Intn(len(safePaths))]
 }
 
@@ -276,7 +277,7 @@ func (tu *TestUtilities) GenerateAttackPath() string {
 		"/etc/passwd\x00.log",
 		"logs/../../../root/.ssh/id_rsa",
 	}
-	
+
 	return attacks[rand.Intn(len(attacks))]
 }
 
@@ -311,7 +312,7 @@ func (tu *TestUtilities) AssertEqual(t *testing.T, expected, actual interface{},
 // RunConcurrentTest runs a test function concurrently
 func (tu *TestUtilities) RunConcurrentTest(t *testing.T, testFunc func(int), numGoroutines int, timeout time.Duration) {
 	done := make(chan error, numGoroutines)
-	
+
 	// Start goroutines
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
@@ -322,11 +323,11 @@ func (tu *TestUtilities) RunConcurrentTest(t *testing.T, testFunc func(int), num
 				}
 				done <- nil
 			}()
-			
+
 			testFunc(id)
 		}(i)
 	}
-	
+
 	// Wait for completion with timeout
 	timer := time.After(timeout)
 	for i := 0; i < numGoroutines; i++ {
@@ -370,7 +371,7 @@ log:
 `,
 		// Control character injection
 		"log:\n  level: \"info\x00\x01\x1f\"",
-		
+
 		// Extremely nested structure
 		strings.Repeat("nested:\n  ", 100) + "log:\n    level: info",
 	}
@@ -380,11 +381,11 @@ log:
 func (tu *TestUtilities) ValidateTestConfig(config *Config) (bool, []string) {
 	validator := NewValidator()
 	err := validator.Validate(config)
-	
+
 	if err == nil {
 		return true, nil
 	}
-	
+
 	return false, strings.Split(err.Error(), ";")
 }
 
@@ -392,14 +393,14 @@ func (tu *TestUtilities) ValidateTestConfig(config *Config) (bool, []string) {
 func (tu *TestUtilities) CreateTestEnvironment(t *testing.T, configContent string) (string, *Manager) {
 	// Create temp directory
 	tempDir := tu.CreateTempDir(t, "env")
-	
+
 	// Create config file
 	if configContent != "" {
 		tu.CreateConfigFile(t, tempDir, configContent)
 	}
-	
+
 	// Create manager
 	manager := NewManager()
-	
+
 	return tempDir, manager
 }

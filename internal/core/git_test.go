@@ -186,7 +186,7 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 	if !strings.Contains(snapshots[0].Message, expectedContent) {
 		t.Errorf("Expected message to contain '%s', got '%s'", expectedContent, snapshots[0].Message)
 	}
-	
+
 	// Verify branch-aware format [branch] message
 	if !strings.HasPrefix(snapshots[0].Message, "[") {
 		t.Errorf("Expected branch-aware message format [branch] message, got '%s'", snapshots[0].Message)
@@ -236,12 +236,12 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	testFiles := []string{"file1.txt", "file2.txt", "dir/file3.txt"}
 	for i, fileName := range testFiles {
 		filePath := filepath.Join(tempDir, fileName)
-		
+
 		// Create directory if needed
 		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			t.Fatalf("Failed to create directory: %v", err)
 		}
-		
+
 		content := []byte("Content " + string(rune('A'+i)))
 		if err := os.WriteFile(filePath, content, 0644); err != nil {
 			t.Fatalf("Failed to create test file %s: %v", fileName, err)

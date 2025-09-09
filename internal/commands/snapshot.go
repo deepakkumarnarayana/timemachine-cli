@@ -3,9 +3,9 @@ package commands
 import (
 	"fmt"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // SnapshotCmd creates the snapshot command for manual snapshot creation
@@ -32,12 +32,12 @@ Examples:
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			message := messageFlag
-			
+
 			// Positional argument takes precedence over flag
 			if len(args) > 0 {
 				message = args[0]
 			}
-			
+
 			return runSnapshot(message)
 		},
 	}
@@ -81,11 +81,11 @@ func runSnapshot(message string) error {
 	currentBranch, _ := gitManager.GetCurrentBranch()
 	color.Green("✨ Snapshot created successfully!")
 	fmt.Printf("   Branch context: %s\n", currentBranch)
-	
+
 	if message != "" {
 		fmt.Printf("   Message: %s\n", message)
 	}
-	
+
 	fmt.Println()
 	fmt.Println("💡 Use 'timemachine list' to see your snapshots")
 	fmt.Println("   Use 'timemachine restore <hash>' to restore if needed")

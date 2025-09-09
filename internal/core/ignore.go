@@ -14,11 +14,11 @@ import (
 // Constants based on real-world analysis and Git's approach
 const (
 	MaxIgnoreFileSize   = 10 * 1024 * 1024 // 10MB (Git allows 100MB, but we're more conservative)
-	MaxIgnoreLines      = 10000             // Maximum lines in ignore file
-	MaxPatternLength    = 4096              // 4KB per pattern (very generous)
-	MaxPatterns         = 1000              // More than any real project needs
-	MaxPathCacheEntries = 10000             // Cache for file path results
-	MaxCacheMemoryMB    = 50                // Memory limit for cache (50MB)
+	MaxIgnoreLines      = 10000            // Maximum lines in ignore file
+	MaxPatternLength    = 4096             // 4KB per pattern (very generous)
+	MaxPatterns         = 1000             // More than any real project needs
+	MaxPathCacheEntries = 10000            // Cache for file path results
+	MaxCacheMemoryMB    = 50               // Memory limit for cache (50MB)
 	DefaultIgnoreFile   = ".timemachine-ignore"
 )
 
@@ -82,13 +82,13 @@ func (eim *EnhancedIgnoreManager) loadIgnoreFile() error {
 	// Security: Check file size before reading
 	if stat, err := file.Stat(); err == nil {
 		if stat.Size() > MaxIgnoreFileSize {
-			return fmt.Errorf("ignore file too large: %d bytes (max %d bytes)", 
+			return fmt.Errorf("ignore file too large: %d bytes (max %d bytes)",
 				stat.Size(), MaxIgnoreFileSize)
 		}
 	}
 
 	scanner := bufio.NewScanner(file)
-	
+
 	// Set buffer size for long lines
 	buf := make([]byte, MaxPatternLength)
 	scanner.Buffer(buf, MaxPatternLength)
@@ -98,16 +98,16 @@ func (eim *EnhancedIgnoreManager) loadIgnoreFile() error {
 
 	for scanner.Scan() {
 		lineCount++
-		
+
 		// Security: Limit total lines
 		if lineCount > MaxIgnoreLines {
-			log.Printf("Warning: Ignore file has too many lines (%d), truncating at %d", 
+			log.Printf("Warning: Ignore file has too many lines (%d), truncating at %d",
 				lineCount, MaxIgnoreLines)
 			break
 		}
 
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -219,7 +219,7 @@ func (eim *EnhancedIgnoreManager) ShouldIgnore(path string) bool {
 	eim.cacheMisses++
 	eim.totalChecks++
 	eim.cacheMutex.Unlock()
-	
+
 	eim.addToCache(relPath, result)
 
 	return result
@@ -229,13 +229,13 @@ func (eim *EnhancedIgnoreManager) ShouldIgnore(path string) bool {
 func (eim *EnhancedIgnoreManager) matchPatterns(relPath string) bool {
 	filename := filepath.Base(relPath)
 	dirname := filepath.Dir(relPath)
-	
+
 	// Process patterns in order (later patterns can override earlier ones)
 	ignored := false
-	
+
 	for _, pattern := range eim.patterns {
 		var matched bool
-		
+
 		if pattern.IsDirectory {
 			// Directory pattern: check against directory components
 			matched = eim.matchDirectoryPattern(pattern, relPath, dirname)
@@ -243,12 +243,12 @@ func (eim *EnhancedIgnoreManager) matchPatterns(relPath string) bool {
 			// File pattern: check against filename or full path
 			matched = eim.matchFilePattern(pattern, relPath, filename)
 		}
-		
+
 		if matched {
 			ignored = !pattern.IsNegation // Negation patterns un-ignore
 		}
 	}
-	
+
 	return ignored
 }
 
@@ -291,9 +291,9 @@ func (eim *EnhancedIgnoreManager) matchDirectoryPattern(pattern IgnorePattern, r
 	if pattern.IsAbsolute {
 		// For absolute directory patterns, match against path from root
 		if pattern.IsSimple {
-			return strings.HasPrefix(relPath, pattern.Pattern+"/") || 
-			       dirname == pattern.Pattern ||
-			       relPath == pattern.Pattern
+			return strings.HasPrefix(relPath, pattern.Pattern+"/") ||
+				dirname == pattern.Pattern ||
+				relPath == pattern.Pattern
 		}
 		matched, err := filepath.Match(pattern.Pattern, dirname)
 		return err == nil && matched
@@ -302,10 +302,10 @@ func (eim *EnhancedIgnoreManager) matchDirectoryPattern(pattern IgnorePattern, r
 	// For non-absolute directory patterns, match against any directory component
 	if pattern.IsSimple {
 		// Check if any part of the path contains this directory
-		return strings.Contains(relPath, "/"+pattern.Pattern+"/") || 
-		       strings.HasPrefix(relPath, pattern.Pattern+"/") ||
-		       dirname == pattern.Pattern ||
-		       relPath == pattern.Pattern  // Match the directory name itself
+		return strings.Contains(relPath, "/"+pattern.Pattern+"/") ||
+			strings.HasPrefix(relPath, pattern.Pattern+"/") ||
+			dirname == pattern.Pattern ||
+			relPath == pattern.Pattern // Match the directory name itself
 	}
 
 	// Check each directory component with wildcards
@@ -346,7 +346,7 @@ func (eim *EnhancedIgnoreManager) addToCache(path string, result bool) {
 func (eim *EnhancedIgnoreManager) clearOldestCacheEntries() {
 	targetSize := len(eim.pathCache) / 2
 	count := 0
-	
+
 	// Clear entries until we reach target size
 	for path := range eim.pathCache {
 		delete(eim.pathCache, path)
@@ -355,7 +355,7 @@ func (eim *EnhancedIgnoreManager) clearOldestCacheEntries() {
 			break
 		}
 	}
-	
+
 	// Reset memory counter (rough estimate)
 	eim.cacheMemory = eim.cacheMemory / 2
 }
@@ -364,7 +364,7 @@ func (eim *EnhancedIgnoreManager) clearOldestCacheEntries() {
 func (eim *EnhancedIgnoreManager) ClearCache() {
 	eim.cacheMutex.Lock()
 	defer eim.cacheMutex.Unlock()
-	
+
 	eim.pathCache = make(map[string]bool)
 	eim.cacheMemory = 0
 	eim.cacheHits = 0
@@ -375,15 +375,15 @@ func (eim *EnhancedIgnoreManager) ClearCache() {
 func (eim *EnhancedIgnoreManager) GetStats() (hits, misses, total int64, hitRate float64) {
 	eim.cacheMutex.RLock()
 	defer eim.cacheMutex.RUnlock()
-	
+
 	hits = eim.cacheHits
 	misses = eim.cacheMisses
 	total = eim.totalChecks
-	
+
 	if total > 0 {
 		hitRate = float64(hits) / float64(total) * 100
 	}
-	
+
 	return
 }
 
@@ -392,7 +392,7 @@ func (eim *EnhancedIgnoreManager) ReloadIgnoreFile() error {
 	// Clear existing patterns and cache
 	eim.patterns = nil
 	eim.ClearCache()
-	
+
 	// Reload from file
 	return eim.loadIgnoreFile()
 }
@@ -406,11 +406,11 @@ func (eim *EnhancedIgnoreManager) GetPatternsCount() int {
 func (eim *EnhancedIgnoreManager) EstimateMemoryUsage() int64 {
 	eim.cacheMutex.RLock()
 	defer eim.cacheMutex.RUnlock()
-	
+
 	// Rough calculation: patterns + cache
 	patternsMemory := int64(len(eim.patterns) * int(unsafe.Sizeof(IgnorePattern{})))
 	cacheMemory := eim.cacheMemory
-	
+
 	return patternsMemory + cacheMemory
 }
 
@@ -421,7 +421,7 @@ func (eim *EnhancedIgnoreManager) ShouldIgnoreFile(path string) bool {
 	return eim.ShouldIgnore(path)
 }
 
-// ShouldIgnoreDirectory determines if a directory should be ignored  
+// ShouldIgnoreDirectory determines if a directory should be ignored
 func (eim *EnhancedIgnoreManager) ShouldIgnoreDirectory(path string) bool {
 	// For directories, append / to match directory patterns correctly
 	dirPath := path

@@ -8,10 +8,10 @@ import (
 // TestValidateGitHash tests the git hash validation function
 func TestValidateGitHash(t *testing.T) {
 	testCases := []struct {
-		name     string
-		hash     string
-		wantErr  bool
-		errMsg   string
+		name    string
+		hash    string
+		wantErr bool
+		errMsg  string
 	}{
 		{
 			name:    "valid short hash",
@@ -73,7 +73,7 @@ func TestValidateGitHash(t *testing.T) {
 				if err == nil {
 					t.Errorf("validateGitHash(%q) expected error, got nil", tc.hash)
 				} else if tc.errMsg != "" && !strings.Contains(err.Error(), tc.errMsg) {
-					t.Errorf("validateGitHash(%q) error = %v, want error containing %q", 
+					t.Errorf("validateGitHash(%q) error = %v, want error containing %q",
 						tc.hash, err, tc.errMsg)
 				}
 			} else {
@@ -88,11 +88,11 @@ func TestValidateGitHash(t *testing.T) {
 // TestSanitizeFilePath tests the file path sanitization function
 func TestSanitizeFilePath(t *testing.T) {
 	testCases := []struct {
-		name         string
-		path         string
-		want         string
-		wantErr      bool
-		errMsgAny    []string // Accept any of these error messages for cross-platform compatibility
+		name      string
+		path      string
+		want      string
+		wantErr   bool
+		errMsgAny []string // Accept any of these error messages for cross-platform compatibility
 	}{
 		{
 			name: "empty path allowed",
@@ -115,39 +115,39 @@ func TestSanitizeFilePath(t *testing.T) {
 			want: "src/main.go",
 		},
 		{
-			name:    "directory traversal attack",
-			path:    "../etc/passwd",
-			wantErr: true,
+			name:      "directory traversal attack",
+			path:      "../etc/passwd",
+			wantErr:   true,
 			errMsgAny: []string{"path traversal not allowed", "path must be local and relative"},
 		},
 		{
-			name:    "directory traversal in middle",
-			path:    "src/../etc/passwd",
-			wantErr: true,
+			name:      "directory traversal in middle",
+			path:      "src/../etc/passwd",
+			wantErr:   true,
 			errMsgAny: []string{"path traversal not allowed", "path must be local and relative"},
 		},
 		{
-			name:    "absolute path",
-			path:    "/etc/passwd",
-			wantErr: true,
+			name:      "absolute path",
+			path:      "/etc/passwd",
+			wantErr:   true,
 			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
-			name:    "windows absolute path",
-			path:    "C:\\Windows\\System32",
-			wantErr: true,
+			name:      "windows absolute path",
+			path:      "C:\\Windows\\System32",
+			wantErr:   true,
 			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
-			name:    "windows absolute path with forward slash",
-			path:    "C:/Windows/System32",
-			wantErr: true,
+			name:      "windows absolute path with forward slash",
+			path:      "C:/Windows/System32",
+			wantErr:   true,
 			errMsgAny: []string{"absolute paths not allowed", "path must be local and relative"},
 		},
 		{
-			name:    "path becomes absolute after cleaning",
-			path:    "/../etc/passwd",
-			wantErr: true,
+			name:      "path becomes absolute after cleaning",
+			path:      "/../etc/passwd",
+			wantErr:   true,
 			errMsgAny: []string{"path traversal not allowed", "path must be local and relative", "path must be relative after normalization"},
 		},
 	}
@@ -169,7 +169,7 @@ func TestSanitizeFilePath(t *testing.T) {
 						}
 					}
 					if !foundMatch {
-						t.Errorf("sanitizeFilePath(%q) error = %v, want error containing one of %v", 
+						t.Errorf("sanitizeFilePath(%q) error = %v, want error containing one of %v",
 							tc.path, err, tc.errMsgAny)
 					}
 				}
@@ -209,16 +209,16 @@ func TestSecurityValidation(t *testing.T) {
 
 	// Test path validation with known bad inputs
 	badPaths := []string{
-		"../etc/passwd",                        // Path traversal
-		"/etc/passwd",                          // Unix absolute path
-		"../../.ssh/id_rsa",                    // Multiple path traversal
-		"/home/user/.ssh/id_rsa",               // Unix absolute path
-		"C:\\Windows\\System32\\config\\SAM",   // Windows absolute path with backslash
-		"C:/Windows/System32/config/SAM",       // Windows absolute path with forward slash
-		"D:\\data\\sensitive.txt",              // Different drive letter
-		"src/../../../etc/passwd",              // Path traversal through valid directory
-		"\\\\server\\share\\file.txt",          // UNC path
-		"/usr/bin/../../../etc/passwd",         // Complex traversal
+		"../etc/passwd",                      // Path traversal
+		"/etc/passwd",                        // Unix absolute path
+		"../../.ssh/id_rsa",                  // Multiple path traversal
+		"/home/user/.ssh/id_rsa",             // Unix absolute path
+		"C:\\Windows\\System32\\config\\SAM", // Windows absolute path with backslash
+		"C:/Windows/System32/config/SAM",     // Windows absolute path with forward slash
+		"D:\\data\\sensitive.txt",            // Different drive letter
+		"src/../../../etc/passwd",            // Path traversal through valid directory
+		"\\\\server\\share\\file.txt",        // UNC path
+		"/usr/bin/../../../etc/passwd",       // Complex traversal
 	}
 
 	for _, path := range badPaths {

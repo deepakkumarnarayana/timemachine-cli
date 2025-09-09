@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 // StatusCmd creates the status command
@@ -92,9 +92,9 @@ func runStatus(verbose bool) error {
 
 		fmt.Println("   Recent activity:")
 		for _, snapshot := range recentSnapshots {
-			fmt.Printf("   • %s  %s  %s\n", 
-				snapshot.Hash[:8], 
-				utils.TruncateString(snapshot.Message, 35), 
+			fmt.Printf("   • %s  %s  %s\n",
+				snapshot.Hash[:8],
+				utils.TruncateString(snapshot.Message, 35),
 				snapshot.Time)
 		}
 
@@ -117,7 +117,7 @@ func runStatus(verbose bool) error {
 	// Configuration status
 	fmt.Println()
 	fmt.Println("⚙️  Configuration:")
-	
+
 	// Check .gitignore
 	gitignorePath := filepath.Join(state.ProjectRoot, ".gitignore")
 	if hasTimeMachineInGitignore(gitignorePath) {
@@ -160,13 +160,12 @@ func showNotInGitRepo() {
 	fmt.Println("3. Run: timemachine start")
 }
 
-
 func hasTimeMachineInGitignore(gitignorePath string) bool {
 	content, err := os.ReadFile(gitignorePath)
 	if err != nil {
 		return false
 	}
-	
+
 	return utils.Contains(string(content), "timemachine_snapshots")
 }
 
@@ -175,7 +174,7 @@ func hasTimeMachineHook(hookPath string) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	return utils.Contains(string(content), "timemachine clean")
 }
 
@@ -190,7 +189,7 @@ func showDetailedStatus(state *core.AppState, gitManager *core.GitManager) {
 
 	// Recent Git activity in main repo
 	fmt.Printf("   Working directory: %s\n", state.ProjectRoot)
-	
+
 	// Check if there are uncommitted changes
 	hasChanges, err := checkUncommittedChanges(state.ProjectRoot)
 	if err == nil {
@@ -205,10 +204,10 @@ func showDetailedStatus(state *core.AppState, gitManager *core.GitManager) {
 func checkUncommittedChanges(projectRoot string) (bool, error) {
 	// Simple check for uncommitted changes
 	// This is a basic implementation - could be enhanced
-	
+
 	// Check if git status shows any changes
 	// For now, we'll just check if there are any untracked files or modifications
 	// A more complete implementation would use git commands
-	
+
 	return false, nil // Placeholder - implement actual git status check if needed
 }

@@ -3,10 +3,10 @@ package commands
 import (
 	"fmt"
 
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 // ListCmd creates the list command
@@ -79,15 +79,15 @@ func runList(filePath string, limit int) error {
 		if len(shortHash) > 8 {
 			shortHash = shortHash[:8]
 		}
-		
+
 		// Format with consistent spacing
-		fmt.Printf("%-10s  %-50s  %s\n", 
-			shortHash, 
-			utils.TruncateString(snapshot.Message, 50), 
+		fmt.Printf("%-10s  %-50s  %s\n",
+			shortHash,
+			utils.TruncateString(snapshot.Message, 50),
 			snapshot.Time,
 		)
 	}
-	
+
 	// Display summary
 	fmt.Println()
 	if filePath != "" {

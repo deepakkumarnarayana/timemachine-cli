@@ -45,12 +45,12 @@ func TestGetCurrentBranch(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	cmd = exec.Command("git", "-C", tempDir, "add", "detached-test.txt")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to add test file: %v", err)
 	}
-	
+
 	cmd = exec.Command("git", "-C", tempDir, "commit", "-m", "test commit for detached HEAD")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to commit test file: %v", err)
@@ -238,7 +238,7 @@ func TestAddCommitMetadata(t *testing.T) {
 		t.Logf("Notes retrieval failed (expected for some scenarios): %v", err)
 	} else {
 		t.Logf("Retrieved notes: %s", notesOutput)
-		
+
 		// Try to parse as JSON
 		var metadata SnapshotMetadata
 		if err := json.Unmarshal([]byte(notesOutput), &metadata); err == nil {
@@ -431,7 +431,7 @@ func TestListBranchSwitches(t *testing.T) {
 	}
 
 	t.Logf("Found %d branch switches", len(switches))
-	
+
 	// Should find at least one switch
 	for _, s := range switches {
 		t.Logf("Branch switch: %s", s.Message)

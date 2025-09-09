@@ -37,7 +37,7 @@ func TestMessageFormatValidation(t *testing.T) {
 
 	message := snapshots[0].Message
 	t.Logf("Initial commit message: %s", message)
-	
+
 	// Should contain branch info in brackets
 	if !strings.HasPrefix(message, "[") || !strings.Contains(message, "]") {
 		t.Errorf("Expected branch format in message, got: %s", message)
@@ -89,7 +89,7 @@ func TestLargeFileCountHandling(t *testing.T) {
 
 	// Create many files to trigger large change warning
 	const fileCount = 30 // More than the 20 file threshold
-	
+
 	for i := 0; i < fileCount; i++ {
 		fileName := filepath.Join(tempDir, fmt.Sprintf("large-test-%d.txt", i))
 		content := fmt.Sprintf("Content of file %d", i)
@@ -270,7 +270,7 @@ func TestBranchSwitchChain(t *testing.T) {
 		}
 	}
 
-	t.Logf("✅ Chain test completed: %d total snapshots, %d detected switches", 
+	t.Logf("✅ Chain test completed: %d total snapshots, %d detected switches",
 		len(allSnapshots), switchCount)
 }
 

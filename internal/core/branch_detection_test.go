@@ -10,7 +10,7 @@ import (
 )
 
 func TestBranchDetection(t *testing.T) {
-	// Create test environment  
+	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
 	defer os.RemoveAll(tempDir)
 
@@ -25,7 +25,7 @@ func TestBranchDetection(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to add file to main repo: %v", err)
 	}
-	
+
 	cmd = exec.Command("git", "-C", tempDir, "commit", "-m", "Initial commit")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to create initial commit in main repo: %v", err)
@@ -112,7 +112,7 @@ func TestBranchDetectionFallback(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Test fallback logic when no previous commits exist
-	testFile := filepath.Join(tempDir, "fallback-test.txt") 
+	testFile := filepath.Join(tempDir, "fallback-test.txt")
 	if err := os.WriteFile(testFile, []byte("fallback test"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestBranchDetectionCorruptedData(t *testing.T) {
 	// Add corrupted notes to test fallback handling
 	hash := snapshots[0].Hash
 	corruptedNotes := "invalid json data"
-	
+
 	// This might fail, but that's expected - we're testing resilience
 	_, err = gitManager.RunCommand("notes", "add", "-f", "-m", corruptedNotes, hash)
 	if err != nil {

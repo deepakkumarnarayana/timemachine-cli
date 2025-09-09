@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,57 +18,118 @@ type GitManager struct {
 	State *AppState // Only essential state needed
 }
 
+// Security validation patterns
+var (
+	// gitDirPattern validates git directory paths to prevent injection
+	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\-]+$`)
+	// gitHashPattern validates git commit hashes
+	gitHashPattern = regexp.MustCompile(`^[a-fA-F0-9]{4,40}$`)
+)
+
+// sanitizeGitPath validates and sanitizes git directory paths
+func sanitizeGitPath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path not allowed")
+	}
+
+	// Clean the path to resolve . and .. elements
+	cleaned := filepath.Clean(path)
+
+	// Prevent path traversal attacks
+	if strings.Contains(cleaned, "..") {
+		return "", fmt.Errorf("path traversal not allowed")
+	}
+
+	// Validate against allowed characters (alphanumeric, dots, slashes, hyphens, underscores)
+	if !gitDirPattern.MatchString(cleaned) {
+		return "", fmt.Errorf("invalid characters in path")
+	}
+
+	return cleaned, nil
+}
+
+// validateGitHash ensures git hash is safe for use in commands
+func validateGitHash(hash string) error {
+	if hash == "" {
+		return fmt.Errorf("empty hash not allowed")
+	}
+	// Only allow alphanumeric characters and ensure reasonable length (4-40 chars for git hashes)
+	if !gitHashPattern.MatchString(hash) {
+		return fmt.Errorf("invalid git hash format: must be 4-40 hexadecimal characters")
+	}
+	return nil
+}
+
 // NewGitManager creates a new GitManager with the given state
 func NewGitManager(state *AppState) *GitManager {
 	return &GitManager{State: state}
 }
 
-
 // RunCommand executes a git command with the shadow repo as the git directory
 // CRITICAL: ALWAYS uses --git-dir and --work-tree to ensure operations
 // happen in shadow repo, not main repo
 func (g *GitManager) RunCommand(args ...string) (string, error) {
+	// Validate and sanitize shadow repo directory path
+	sanitizedShadowRepo, err := sanitizeGitPath(g.State.ShadowRepoDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+
+	// Validate and sanitize project root path
+	sanitizedProjectRoot, err := sanitizeGitPath(g.State.ProjectRoot)
+	if err != nil {
+		return "", fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	// Build command: git --git-dir=<shadow_repo_path> --work-tree=<project_root> <args>
 	fullArgs := []string{
-		"--git-dir=" + g.State.ShadowRepoDir,
-		"--work-tree=" + g.State.ProjectRoot,
+		"--git-dir=" + sanitizedShadowRepo,
+		"--work-tree=" + sanitizedProjectRoot,
 	}
 	fullArgs = append(fullArgs, args...)
-	
+
+	// #nosec G204 - Git paths are validated and sanitized above
 	cmd := exec.Command("git", fullArgs...)
-	
+
 	// Capture both stdout and stderr
 	output, err := cmd.CombinedOutput()
-	
+
 	if err != nil {
 		return "", fmt.Errorf("git command failed: %s\nOutput: %s", err.Error(), string(output))
 	}
-	
+
 	return strings.TrimSpace(string(output)), nil
 }
 
 // GetCurrentBranch returns the currently active branch in the main repository
 func (g *GitManager) GetCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "branch", "--show-current")
+	// Validate and sanitize git directory path
+	sanitizedGitDir, err := sanitizeGitPath(g.State.GitDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid git directory: %w", err)
+	}
+
+	// #nosec G204 - Git directory path is validated and sanitized above
+	cmd := exec.Command("git", "--git-dir="+sanitizedGitDir, "branch", "--show-current")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	
+
 	branch := strings.TrimSpace(string(output))
 	if branch == "" {
 		return "main", nil // Default to main if detached HEAD or empty
 	}
-	
+
 	return branch, nil
 }
 
 // BranchDetectionResult provides detailed information about branch detection
 type BranchDetectionResult struct {
-	LastBranch    string
-	HasHistory    bool
-	IsCorrupted   bool
-	CommitCount   int
+	LastBranch  string
+	HasHistory  bool
+	IsCorrupted bool
+	CommitCount int
 }
 
 // getLastCommitBranchAdvanced extracts branch info with enhanced fallback logic
@@ -77,7 +140,7 @@ func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
 		IsCorrupted: false,
 		CommitCount: 0,
 	}
-	
+
 	// First, check if we have any commit history
 	countOutput, err := g.RunCommand("rev-list", "--count", "--all")
 	if err == nil {
@@ -86,12 +149,12 @@ func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
 			result.HasHistory = count > 0
 		}
 	}
-	
+
 	// If no history, return early (this is initial commit scenario)
 	if !result.HasHistory {
 		return result
 	}
-	
+
 	// Get the last commit message
 	output, err := g.RunCommand("log", "-1", "--format=%s")
 	if err != nil {
@@ -99,13 +162,13 @@ func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
 		result.IsCorrupted = true
 		return result
 	}
-	
+
 	message := strings.TrimSpace(output)
 	if message == "" {
 		result.IsCorrupted = true
 		return result
 	}
-	
+
 	// Extract branch from format [branch-name] or [prev→curr]
 	if strings.HasPrefix(message, "[") {
 		endBracket := strings.Index(message, "]")
@@ -124,7 +187,7 @@ func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
 			return result
 		}
 	}
-	
+
 	// Message doesn't follow our format - mark as corrupted but don't fail
 	result.IsCorrupted = true
 	return result
@@ -135,18 +198,17 @@ func (g *GitManager) getLastCommitBranch() string {
 	return g.getLastCommitBranchAdvanced().LastBranch
 }
 
-
 // countUncommittedFiles counts files that would be included in next commit
 func (g *GitManager) countUncommittedFiles() (int, error) {
 	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
 		return 0, err
 	}
-	
+
 	if strings.TrimSpace(status) == "" {
 		return 0, nil
 	}
-	
+
 	lines := strings.Split(strings.TrimSpace(status), "\n")
 	return len(lines), nil
 }
@@ -165,6 +227,10 @@ type SnapshotMetadata struct {
 
 // addCommitMetadata adds structured metadata to commit using git notes
 func (g *GitManager) addCommitMetadata(commitHash, currentBranch, lastCommitBranch string, changeCount int, commitType string, isBranchSwitch bool) error {
+	// Validate commit hash for security
+	if err := validateGitHash(commitHash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
 	metadata := SnapshotMetadata{
 		Branch:         currentBranch,
 		PreviousBranch: lastCommitBranch,
@@ -174,13 +240,13 @@ func (g *GitManager) addCommitMetadata(commitHash, currentBranch, lastCommitBran
 		Type:           commitType,
 		LargeChange:    changeCount > 20,
 	}
-	
+
 	jsonData, err := json.Marshal(metadata)
 	if err != nil {
 		fmt.Printf("Warning: failed to marshal metadata: %v\n", err)
 		return nil // Don't fail commit for metadata issues
 	}
-	
+
 	_, err = g.RunCommand("notes", "add", "-m", string(jsonData), commitHash)
 	if err != nil {
 		// Don't fail commit if notes fail - text extraction is primary
@@ -197,37 +263,37 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 	if err != nil {
 		return fmt.Errorf("failed to check status: %w", err)
 	}
-	
+
 	if strings.TrimSpace(status) == "" {
 		return nil // No changes to commit
 	}
-	
+
 	// Stage all changes
 	_, err = g.RunCommand("add", "-A")
 	if err != nil {
 		return fmt.Errorf("failed to stage changes: %w", err)
 	}
-	
+
 	// Get current branch from main repository
 	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
-	
+
 	// Count changes
 	changeCount, err := g.countUncommittedFiles()
 	if err != nil {
 		changeCount = 0
 	}
-	
+
 	// Check if this is a branch switch using enhanced detection
 	// PRIMARY: Text extraction from commit history (reliable, human-readable)
 	branchDetection := g.getLastCommitBranchAdvanced()
-	
+
 	// Determine if this is a branch switch with enhanced logic
 	var isBranchSwitch bool
 	var isInitialCommit bool
-	
+
 	if !branchDetection.HasHistory {
 		// This is the very first commit in shadow repo
 		isInitialCommit = true
@@ -243,11 +309,11 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		// Normal case: compare branches
 		isBranchSwitch = branchDetection.LastBranch != currentBranch
 	}
-	
+
 	// Create smart commit message (PRIMARY source of truth)
 	var message string
 	var commitType string
-	
+
 	if isInitialCommit {
 		// Very first watcher commit
 		message = fmt.Sprintf("[%s] INITIAL: Auto-snapshot from file watcher", currentBranch)
@@ -258,12 +324,12 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		if lastBranch == "" {
 			lastBranch = "unknown" // Handle corrupted/missing data gracefully
 		}
-		
+
 		if changeCount > 20 {
-			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)", 
+			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files - LARGE CHANGES ⚠️)",
 				lastBranch, currentBranch, changeCount)
 		} else {
-			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)", 
+			message = fmt.Sprintf("[%s→%s] Auto-snapshot after branch switch (%d files)",
 				lastBranch, currentBranch, changeCount)
 		}
 		commitType = "watcher-branch-switch"
@@ -272,13 +338,13 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 		message = fmt.Sprintf("[%s] Auto-snapshot from file watcher", currentBranch)
 		commitType = "watcher-auto"
 	}
-	
+
 	// Create commit with human-readable message
 	output, err := g.RunCommand("commit", "-m", message)
 	if err != nil {
 		return fmt.Errorf("failed to create watcher snapshot: %w", err)
 	}
-	
+
 	// Add structured metadata using git notes (SECONDARY - fast queries)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) > 0 {
@@ -296,7 +362,7 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -306,26 +372,26 @@ func (g *GitManager) InitializeShadowRepo() error {
 	if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil {
 		return fmt.Errorf("failed to create shadow repo directory: %w", err)
 	}
-	
+
 	// Initialize the shadow repo
 	_, err := g.RunCommand("init")
 	if err != nil {
 		return fmt.Errorf("failed to initialize shadow repository: %w", err)
 	}
-	
+
 	// Copy user.name and user.email from main repo
 	if err := g.CopyGitConfig(); err != nil {
 		return fmt.Errorf("failed to copy git config: %w", err)
 	}
-	
+
 	// Create initial empty commit to establish repository history
 	if err := g.createInitialCommit(); err != nil {
 		return fmt.Errorf("failed to create initial commit: %w", err)
 	}
-	
+
 	// Update state
 	g.State.IsInitialized = true
-	
+
 	return nil
 }
 
@@ -336,49 +402,63 @@ func (g *GitManager) SetupShadowRepo() error {
 	if err := os.MkdirAll(g.State.ShadowRepoDir, 0755); err != nil {
 		return fmt.Errorf("failed to create shadow repo directory: %w", err)
 	}
-	
+
 	// Initialize the shadow repo
 	_, err := g.RunCommand("init")
 	if err != nil {
 		return fmt.Errorf("failed to initialize shadow repository: %w", err)
 	}
-	
+
 	// Copy user.name and user.email from main repo
 	if err := g.CopyGitConfig(); err != nil {
 		return fmt.Errorf("failed to copy git config: %w", err)
 	}
-	
+
 	// DO NOT create any commits - let CreateSnapshot() handle that
 	// Update state
 	g.State.IsInitialized = true
-	
+
 	return nil
 }
 
 // CopyGitConfig copies user.name and user.email from the main repo to shadow repo
 func (g *GitManager) CopyGitConfig() error {
+	// Validate and sanitize git directory path
+	sanitizedGitDir, err := sanitizeGitPath(g.State.GitDir)
+	if err != nil {
+		return fmt.Errorf("invalid git directory: %w", err)
+	}
+
 	// Get user.name from main repo
-	cmd := exec.Command("git", "--git-dir="+g.State.GitDir, "config", "user.name")
+	// #nosec G204 - Git directory path is validated and sanitized above
+	cmd := exec.Command("git", "--git-dir="+sanitizedGitDir, "config", "user.name")
 	nameOutput, err := cmd.Output()
 	if err == nil && len(nameOutput) > 0 {
 		name := strings.TrimSpace(string(nameOutput))
-		_, err = g.RunCommand("config", "user.name", name)
-		if err != nil {
-			return fmt.Errorf("failed to set user.name: %w", err)
+		// Validate git config name to prevent injection
+		if name != "" && !strings.ContainsAny(name, "\n\r;\\") {
+			_, err = g.RunCommand("config", "user.name", name)
+			if err != nil {
+				return fmt.Errorf("failed to set user.name: %w", err)
+			}
 		}
 	}
-	
+
 	// Get user.email from main repo
-	cmd = exec.Command("git", "--git-dir="+g.State.GitDir, "config", "user.email")
+	// #nosec G204 - Git directory path is validated and sanitized above
+	cmd = exec.Command("git", "--git-dir="+sanitizedGitDir, "config", "user.email")
 	emailOutput, err := cmd.Output()
 	if err == nil && len(emailOutput) > 0 {
 		email := strings.TrimSpace(string(emailOutput))
-		_, err = g.RunCommand("config", "user.email", email)
-		if err != nil {
-			return fmt.Errorf("failed to set user.email: %w", err)
+		// Validate git config email to prevent injection
+		if email != "" && !strings.ContainsAny(email, "\n\r;\\") {
+			_, err = g.RunCommand("config", "user.email", email)
+			if err != nil {
+				return fmt.Errorf("failed to set user.email: %w", err)
+			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -390,38 +470,38 @@ func (g *GitManager) CreateSnapshot(message string) error {
 	if err != nil {
 		return fmt.Errorf("failed to stage files: %w", err)
 	}
-	
+
 	// Check if there are any changes to commit
 	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
 		return fmt.Errorf("failed to check status: %w", err)
 	}
-	
+
 	// If no changes, don't create empty commits
 	if strings.TrimSpace(status) == "" {
 		return nil
 	}
-	
+
 	// Count files being committed
 	changeCount, err := g.countUncommittedFiles()
 	if err != nil {
 		changeCount = 0 // Continue even if count fails
 	}
-	
+
 	// Get current branch from main repository
 	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
-	
+
 	// Check if this is a branch switch using enhanced detection
 	// PRIMARY: Text extraction from commit history (reliable, human-readable)
 	branchDetection := g.getLastCommitBranchAdvanced()
-	
+
 	// Determine if this is a branch switch with enhanced logic
 	var isBranchSwitch bool
 	var isInitialCommit bool
-	
+
 	if !branchDetection.HasHistory {
 		// This is the very first commit in shadow repo
 		isInitialCommit = true
@@ -438,11 +518,11 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		// Normal case: compare branches
 		isBranchSwitch = branchDetection.LastBranch != currentBranch
 	}
-	
+
 	// Create smart commit message (PRIMARY source of truth)
 	var enhancedMessage string
 	var commitType string
-	
+
 	if isInitialCommit {
 		// Very first commit in shadow repository
 		if message == "" {
@@ -456,15 +536,15 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		if lastBranch == "" {
 			lastBranch = "unknown" // Handle corrupted/missing data gracefully
 		}
-		
+
 		if changeCount > 20 {
-			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)", 
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files - LARGE CHANGES ⚠️)",
 				lastBranch, currentBranch, message, changeCount)
 		} else if changeCount > 5 {
-			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)", 
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s (%d files)",
 				lastBranch, currentBranch, message, changeCount)
 		} else {
-			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s", 
+			enhancedMessage = fmt.Sprintf("[%s→%s] BRANCH SWITCH: %s",
 				lastBranch, currentBranch, message)
 		}
 		commitType = "branch-switch"
@@ -477,17 +557,17 @@ func (g *GitManager) CreateSnapshot(message string) error {
 		enhancedMessage = fmt.Sprintf("[%s] %s", currentBranch, message)
 		commitType = "manual"
 	}
-	
+
 	// Create the commit with human-readable message
 	output, err := g.RunCommand("commit", "-m", enhancedMessage)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot: %w", err)
 	}
-	
+
 	// Extract commit hash from git commit output
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	commitInfo := lines[0] // First line contains commit info
-	
+
 	// Add structured metadata using git notes (SECONDARY - fast queries)
 	if strings.Contains(commitInfo, "[") {
 		parts := strings.Fields(commitInfo)
@@ -501,7 +581,7 @@ func (g *GitManager) CreateSnapshot(message string) error {
 			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -516,20 +596,20 @@ type Snapshot struct {
 func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, error) {
 	// Build git log command
 	args := []string{"log", "--oneline", "--date=relative"}
-	
+
 	// Add pretty format to get hash, message, and relative time
 	args = append(args, "--pretty=format:%H|%s|%ar")
-	
+
 	// Add limit if specified
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
-	
+
 	// Add file filter if specified
 	if filePath != "" {
 		args = append(args, "--", filePath)
 	}
-	
+
 	output, err := g.RunCommand(args...)
 	if err != nil {
 		// If no commits exist yet, return empty slice (not error)
@@ -538,28 +618,28 @@ func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, erro
 		}
 		return nil, fmt.Errorf("failed to list snapshots: %w", err)
 	}
-	
+
 	// Parse output into Snapshot structs
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	snapshots := make([]Snapshot, 0, len(lines))
-	
+
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		
+
 		parts := strings.SplitN(line, "|", 3)
 		if len(parts) != 3 {
 			continue
 		}
-		
+
 		snapshots = append(snapshots, Snapshot{
 			Hash:    parts[0],
 			Message: parts[1],
 			Time:    parts[2],
 		})
 	}
-	
+
 	return snapshots, nil
 }
 
@@ -570,12 +650,12 @@ func (g *GitManager) ListSnapshotsByBranch(branchName string, limit int) ([]Snap
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Filter by branch name in commit message
 	var filtered []Snapshot
 	branchPattern := fmt.Sprintf("[%s]", branchName)
 	switchPattern := fmt.Sprintf("→%s]", branchName) // Also catch branch switches TO this branch
-	
+
 	for _, snapshot := range snapshots {
 		if strings.Contains(snapshot.Message, branchPattern) || strings.Contains(snapshot.Message, switchPattern) {
 			filtered = append(filtered, snapshot)
@@ -584,47 +664,57 @@ func (g *GitManager) ListSnapshotsByBranch(branchName string, limit int) ([]Snap
 			}
 		}
 	}
-	
+
 	return filtered, nil
 }
 
 // GetSnapshotMetadata retrieves structured metadata for a snapshot using git notes
 func (g *GitManager) GetSnapshotMetadata(hash string) (*SnapshotMetadata, error) {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return nil, fmt.Errorf("invalid commit hash: %w", err)
+	}
+
 	output, err := g.RunCommand("notes", "show", hash)
 	if err != nil {
 		// Notes don't exist for this commit - fallback to text extraction
 		return g.extractMetadataFromCommitMessage(hash)
 	}
-	
+
 	var metadata SnapshotMetadata
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &metadata); err != nil {
 		// Notes exist but are corrupted - fallback to text extraction
 		fmt.Printf("Warning: corrupted metadata notes for %s, using text extraction\n", hash)
 		return g.extractMetadataFromCommitMessage(hash)
 	}
-	
+
 	return &metadata, nil
 }
 
 // extractMetadataFromCommitMessage creates metadata by parsing commit message (fallback)
 func (g *GitManager) extractMetadataFromCommitMessage(hash string) (*SnapshotMetadata, error) {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return nil, fmt.Errorf("invalid commit hash: %w", err)
+	}
+
 	output, err := g.RunCommand("log", "-1", "--format=%s", hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit message: %w", err)
 	}
-	
+
 	message := strings.TrimSpace(output)
 	metadata := &SnapshotMetadata{
 		Timestamp: time.Now(), // Approximate, could get actual commit time
 		Type:      "unknown",
 	}
-	
+
 	// Parse branch information from commit message
 	if strings.HasPrefix(message, "[") {
 		endBracket := strings.Index(message, "]")
 		if endBracket > 1 {
 			branchPart := message[1:endBracket]
-			
+
 			// Handle branch switch format [prev→curr]
 			if strings.Contains(branchPart, "→") {
 				parts := strings.Split(branchPart, "→")
@@ -641,7 +731,7 @@ func (g *GitManager) extractMetadataFromCommitMessage(hash string) (*SnapshotMet
 			}
 		}
 	}
-	
+
 	return metadata, nil
 }
 
@@ -651,7 +741,7 @@ func (g *GitManager) ListBranchSwitches(limit int) ([]Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var switches []Snapshot
 	for _, snapshot := range snapshots {
 		// Look for branch switch indicators in commit message
@@ -662,7 +752,7 @@ func (g *GitManager) ListBranchSwitches(limit int) ([]Snapshot, error) {
 			}
 		}
 	}
-	
+
 	return switches, nil
 }
 
@@ -670,8 +760,13 @@ func (g *GitManager) ListBranchSwitches(limit int) ([]Snapshot, error) {
 // NEVER use checkout or reset - they affect staging area
 // ALWAYS use git restore --source=<hash> --worktree
 func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
 	args := []string{"restore", "--source=" + hash, "--worktree"}
-	
+
 	if len(files) == 0 {
 		// Restore everything
 		args = append(args, ".")
@@ -679,12 +774,12 @@ func (g *GitManager) RestoreSnapshot(hash string, files []string) error {
 		// Restore specific files
 		args = append(args, files...)
 	}
-	
+
 	_, err := g.RunCommand(args...)
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -695,20 +790,20 @@ func (g *GitManager) createInitialCommit() error {
 	if err != nil {
 		return fmt.Errorf("failed to stage files for initial commit: %w", err)
 	}
-	
+
 	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		currentBranch = "main"
 	}
-	
+
 	message := fmt.Sprintf("[%s] Initial TimeMachine shadow repository", currentBranch)
-	
+
 	// Check if there are files to commit
 	status, err := g.RunCommand("status", "--porcelain")
 	if err != nil {
 		return fmt.Errorf("failed to check status for initial commit: %w", err)
 	}
-	
+
 	if strings.TrimSpace(status) == "" {
 		// No files to commit, create empty commit
 		_, err = g.RunCommand("commit", "--allow-empty", "-m", message)
@@ -716,10 +811,10 @@ func (g *GitManager) createInitialCommit() error {
 		// Files exist, create normal commit
 		_, err = g.RunCommand("commit", "-m", message)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to create initial commit: %w", err)
 	}
-	
+
 	return nil
 }

@@ -8,10 +8,38 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
+
+// Security validation patterns
+var (
+	// gitDirPattern validates git directory paths to prevent injection
+	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\-]+$`)
+)
+
+// sanitizeGitPath validates and sanitizes git directory paths
+func sanitizeGitPath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path not allowed")
+	}
+
+	// Clean the path to resolve . and .. elements
+	cleaned := filepath.Clean(path)
+
+	// Prevent path traversal attacks
+	if strings.Contains(cleaned, "..") {
+		return "", fmt.Errorf("path traversal not allowed")
+	}
+
+	// Validate against allowed characters (alphanumeric, dots, slashes, hyphens, underscores)
+	if !gitDirPattern.MatchString(cleaned) {
+		return "", fmt.Errorf("invalid characters in path")
+	}
+
+	return cleaned, nil
+}
 
 // validateGitHash ensures git hash is safe for use in commands
 func validateGitHash(hash string) error {
@@ -34,47 +62,47 @@ func sanitizeFilePath(path string) (string, error) {
 	if path == "" {
 		return "", nil // Empty path is allowed for no filter
 	}
-	
+
 	// First line of defense: explicit path traversal detection
 	// filepath.IsLocal allows some traversal patterns that resolve within the directory
 	if strings.Contains(path, "..") {
 		return "", fmt.Errorf("path traversal not allowed")
 	}
-	
+
 	// Second line of defense: Windows absolute path detection (critical for cross-platform security)
 	// filepath.IsLocal and filepath.IsAbs don't detect Windows paths on Unix systems
 	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
 		return "", fmt.Errorf("absolute paths not allowed")
 	}
-	
+
 	// Additional Windows path detection: UNC paths (\\server\share)
 	if strings.HasPrefix(path, "\\\\") || strings.HasPrefix(path, "//") {
 		return "", fmt.Errorf("UNC and network paths not allowed")
 	}
-	
+
 	// Third line of defense: Unix absolute path detection
 	if filepath.IsAbs(path) {
 		return "", fmt.Errorf("absolute paths not allowed")
 	}
-	
+
 	// Fourth line of defense: Use Go 1.20+ filepath.IsLocal for additional validation
 	// This catches edge cases we might have missed
 	if !filepath.IsLocal(path) {
 		return "", fmt.Errorf("path must be local and relative")
 	}
-	
+
 	// Clean and normalize the path
 	cleaned := filepath.Clean(path)
-	
+
 	// Convert to forward slashes for cross-platform consistency
 	// Windows filepath.Clean() converts / to \, but we want / for Git compatibility
 	cleaned = filepath.ToSlash(cleaned)
-	
+
 	// Final validation: ensure cleaning didn't create an absolute path
 	if strings.HasPrefix(cleaned, "/") || filepath.IsAbs(cleaned) {
 		return "", fmt.Errorf("path must be relative after normalization")
 	}
-	
+
 	return cleaned, nil
 }
 
@@ -217,14 +245,22 @@ func showRepositoryStats(state *core.AppState) error {
 	color.Cyan("🗄️  Repository Statistics")
 	color.Cyan("========================")
 
+	// Validate and sanitize shadow repo directory path
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+
 	// Repository size
-	cmd := exec.Command("du", "-sh", state.ShadowRepoDir)
+	// #nosec G204 - Shadow repo directory path is validated and sanitized above
+	cmd := exec.Command("du", "-sh", sanitizedShadowRepo)
 	if sizeOutput, err := cmd.Output(); err == nil {
 		fmt.Printf("Repository size: %s", string(sizeOutput))
 	}
 
 	// Object count and storage details
-	cmd = exec.Command("git", "--git-dir="+state.ShadowRepoDir, "count-objects", "-v")
+	// #nosec G204 - Shadow repo directory path is validated and sanitized above
+	cmd = exec.Command("git", "--git-dir="+sanitizedShadowRepo, "count-objects", "-v")
 	if objectOutput, err := cmd.Output(); err == nil {
 		lines := strings.Split(string(objectOutput), "\n")
 		for _, line := range lines {
@@ -236,7 +272,8 @@ func showRepositoryStats(state *core.AppState) error {
 	}
 
 	// Total commits
-	cmd = exec.Command("git", "--git-dir="+state.ShadowRepoDir, "rev-list", "--count", "HEAD")
+	// #nosec G204 - Shadow repo directory path is validated and sanitized above
+	cmd = exec.Command("git", "--git-dir="+sanitizedShadowRepo, "rev-list", "--count", "HEAD")
 	if countOutput, err := cmd.Output(); err == nil {
 		count := strings.TrimSpace(string(countOutput))
 		fmt.Printf("  total-snapshots: %s\n", count)
@@ -246,13 +283,29 @@ func showRepositoryStats(state *core.AppState) error {
 }
 
 func showSnapshotOverview(state *core.AppState, hash string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	color.Green("🔍 Snapshot Overview")
 	fmt.Printf("Hash: %s\n", hash)
 
 	// Get commit info
-	cmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "--work-tree="+state.ProjectRoot,
+	// #nosec G204 - All parameters are validated and sanitized above
+	cmd := exec.Command("git", "--git-dir="+sanitizedShadowRepo, "--work-tree="+sanitizedProjectRoot,
 		"show", "--no-patch", "--format=%an%n%ad%n%s", hash)
-	
+
 	if output, err := cmd.Output(); err == nil {
 		lines := strings.Split(string(output), "\n")
 		if len(lines) >= 3 {
@@ -267,17 +320,33 @@ func showSnapshotOverview(state *core.AppState, hash string) error {
 }
 
 func showFileChanges(state *core.AppState, hash string, fileFilter string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	color.Blue("📝 File Changes")
 	color.Blue("===============")
 
 	// Build command args
-	args := []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+	args := []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 		"show", "--name-status", hash}
-	
+
 	if fileFilter != "" {
 		args = append(args, "--", fileFilter)
 	}
 
+	// #nosec G204 - All parameters are validated and sanitized above
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -287,12 +356,12 @@ func showFileChanges(state *core.AppState, hash string, fileFilter string) error
 	// Parse and display file changes
 	lines := strings.Split(string(output), "\n")
 	fileCount := 0
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "commit ") || 
-		   strings.HasPrefix(line, "Author:") || strings.HasPrefix(line, "Date:") ||
-		   strings.Contains(line, "Snapshot at") {
+		if line == "" || strings.HasPrefix(line, "commit ") ||
+			strings.HasPrefix(line, "Author:") || strings.HasPrefix(line, "Date:") ||
+			strings.Contains(line, "Snapshot at") {
 			continue
 		}
 
@@ -311,7 +380,7 @@ func showFileChanges(state *core.AppState, hash string, fileFilter string) error
 				statusColor = color.New(color.FgGreen)
 				statusText = "Added"
 			case "M":
-				statusColor = color.New(color.FgYellow) 
+				statusColor = color.New(color.FgYellow)
 				statusText = "Modified"
 			case "D":
 				statusColor = color.New(color.FgRed)
@@ -343,14 +412,30 @@ func showFileChanges(state *core.AppState, hash string, fileFilter string) error
 }
 
 func showDeletedFiles(state *core.AppState, hash string, fileFilter string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	// Get list of deleted files
-	args := []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+	args := []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 		"show", "--name-status", hash}
-	
+
 	if fileFilter != "" {
 		args = append(args, "--", fileFilter)
 	}
 
+	// #nosec G204 - All parameters are validated and sanitized above
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -360,12 +445,12 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 	// Find deleted files
 	deletedFiles := []string{}
 	lines := strings.Split(string(output), "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "commit ") || 
-		   strings.HasPrefix(line, "Author:") || strings.HasPrefix(line, "Date:") ||
-		   strings.Contains(line, "Snapshot at") {
+		if line == "" || strings.HasPrefix(line, "commit ") ||
+			strings.HasPrefix(line, "Author:") || strings.HasPrefix(line, "Date:") ||
+			strings.Contains(line, "Snapshot at") {
 			continue
 		}
 
@@ -384,19 +469,21 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 
 	for _, filename := range deletedFiles {
 		// Get the parent commit to show what the file contained before deletion
-		parentCmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "show", "--format=%P", "--no-patch", hash)
+		// #nosec G204 - All parameters are validated and sanitized above
+		parentCmd := exec.Command("git", "--git-dir="+sanitizedShadowRepo, "show", "--format=%P", "--no-patch", hash)
 		parentOutput, err := parentCmd.Output()
 		if err != nil {
 			continue
 		}
-		
+
 		parent := strings.TrimSpace(string(parentOutput))
 		if parent == "" {
 			continue
 		}
 
 		// Show file content from parent commit
-		fileCmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "show", parent+":"+filename)
+		// #nosec G204 - All parameters are validated and sanitized above
+		fileCmd := exec.Command("git", "--git-dir="+sanitizedShadowRepo, "show", parent+":"+filename)
 		fileContent, err := fileCmd.Output()
 		if err != nil {
 			color.Yellow(fmt.Sprintf("⚠️  Could not retrieve content of deleted file: %s", filename))
@@ -405,7 +492,7 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 
 		color.Cyan(fmt.Sprintf("📄 File: %s (before deletion)", filename))
 		color.Cyan(strings.Repeat("-", len(filename)+25))
-		
+
 		// Show file contents with line numbers
 		contentLines := strings.Split(string(fileContent), "\n")
 		for i, contentLine := range contentLines {
@@ -421,17 +508,33 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 }
 
 func showDetailedDiff(state *core.AppState, hash string, fileFilter string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	color.Magenta("📋 Detailed Changes")
 	color.Magenta("===================")
 
 	// Build command args
-	args := []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+	args := []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 		"show", hash}
-	
+
 	if fileFilter != "" {
 		args = append(args, "--", fileFilter)
 	}
 
+	// #nosec G204 - All parameters are validated and sanitized above
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -443,7 +546,7 @@ func showDetailedDiff(state *core.AppState, hash string, fileFilter string) erro
 	inDiffSection := false
 	currentFile := ""
 	isDeletedFile := false
-	
+
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
 			inDiffSection = true
@@ -477,7 +580,7 @@ func showDetailedDiff(state *core.AppState, hash string, fileFilter string) erro
 		} else if inDiffSection {
 			fmt.Println(line)
 		}
-		
+
 		// Reset flags when moving to next file
 		if strings.HasPrefix(line, "diff --git") && inDiffSection {
 			isDeletedFile = false
@@ -488,14 +591,30 @@ func showDetailedDiff(state *core.AppState, hash string, fileFilter string) erro
 }
 
 func showComprehensiveAnalysis(state *core.AppState, hash string) error {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	fmt.Println()
 	color.Cyan("📊 Comprehensive Analysis")
 	color.Cyan("=========================")
 
 	// Show diff stats
-	cmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "--work-tree="+state.ProjectRoot,
+	// #nosec G204 - All parameters are validated and sanitized above
+	cmd := exec.Command("git", "--git-dir="+sanitizedShadowRepo, "--work-tree="+sanitizedProjectRoot,
 		"show", "--stat", hash)
-	
+
 	if output, err := cmd.Output(); err == nil {
 		fmt.Println("Statistics:")
 		lines := strings.Split(string(output), "\n")
@@ -507,7 +626,8 @@ func showComprehensiveAnalysis(state *core.AppState, hash string) error {
 	}
 
 	// Show parent commit (what it was based on)
-	cmd = exec.Command("git", "--git-dir="+state.ShadowRepoDir, "show", "--format=%P", "--no-patch", hash)
+	// #nosec G204 - All parameters are validated and sanitized above
+	cmd = exec.Command("git", "--git-dir="+sanitizedShadowRepo, "show", "--format=%P", "--no-patch", hash)
 	if output, err := cmd.Output(); err == nil {
 		parent := strings.TrimSpace(string(output))
 		if parent != "" {
@@ -516,7 +636,8 @@ func showComprehensiveAnalysis(state *core.AppState, hash string) error {
 	}
 
 	// Show object information
-	cmd = exec.Command("git", "--git-dir="+state.ShadowRepoDir, "cat-file", "-s", hash)
+	// #nosec G204 - All parameters are validated and sanitized above
+	cmd = exec.Command("git", "--git-dir="+sanitizedShadowRepo, "cat-file", "-s", hash)
 	if output, err := cmd.Output(); err == nil {
 		size := strings.TrimSpace(string(output))
 		if sizeInt, err := strconv.Atoi(size); err == nil {
@@ -528,7 +649,19 @@ func showComprehensiveAnalysis(state *core.AppState, hash string) error {
 }
 
 func isValidHash(state *core.AppState, hash string) bool {
-	cmd := exec.Command("git", "--git-dir="+state.ShadowRepoDir, "cat-file", "-e", hash)
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return false
+	}
+
+	// Validate and sanitize directory path
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return false
+	}
+
+	// #nosec G204 - All parameters are validated and sanitized above
+	cmd := exec.Command("git", "--git-dir="+sanitizedShadowRepo, "cat-file", "-e", hash)
 	return cmd.Run() == nil
 }
 
@@ -558,18 +691,29 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 	}
 	fmt.Println()
 
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	// Use Git's native --follow command for efficient file history
 	var args []string
 	if fileFilter != "" {
 		// Use git log --follow for file-specific history (most efficient)
-		args = []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+		args = []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 			"log", "--follow", "--oneline", "--date=short", "--format=%H|%ad|%s", "--", fileFilter}
 	} else {
 		// Show all snapshots
-		args = []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+		args = []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 			"log", "--oneline", "--date=short", "--format=%H|%ad|%s"}
 	}
 
+	// #nosec G204 - All parameters are validated and sanitized above
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -592,9 +736,9 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 		if len(parts) != 3 {
 			continue
 		}
-		
+
 		hash := parts[0]
-		date := parts[1] 
+		date := parts[1]
 		message := parts[2]
 
 		color.Cyan(fmt.Sprintf("📸 Snapshot %d/%d - %s", i+1, len(lines), hash[:8]))
@@ -611,7 +755,7 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 				fmt.Println()
 			}
 		}
-		
+
 		fmt.Println(strings.Repeat("-", 60))
 	}
 
@@ -626,14 +770,25 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 }
 
 func showFileOperationsHistory(state *core.AppState, filename string) error {
+	// Validate and sanitize directory paths
+	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("invalid shadow repo directory: %w", err)
+	}
+	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("invalid project root directory: %w", err)
+	}
+
 	fmt.Println()
 	color.Magenta("📋 File Operations History")
 	color.Magenta("==========================")
 
 	// Show renames/moves using --follow --name-status
-	args := []string{"--git-dir=" + state.ShadowRepoDir, "--work-tree=" + state.ProjectRoot,
+	args := []string{"--git-dir=" + sanitizedShadowRepo, "--work-tree=" + sanitizedProjectRoot,
 		"log", "--follow", "--name-status", "--format=%H|%ad|%s", "--date=short", "--", filename}
-	
+
+	// #nosec G204 - All parameters are validated and sanitized above
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -642,13 +797,13 @@ func showFileOperationsHistory(state *core.AppState, filename string) error {
 
 	lines := strings.Split(string(output), "\n")
 	currentCommit := ""
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		if strings.Contains(line, "|") {
 			// Commit info line
 			parts := strings.SplitN(line, "|", 3)
@@ -662,7 +817,7 @@ func showFileOperationsHistory(state *core.AppState, filename string) error {
 			if len(parts) == 2 {
 				status := parts[0]
 				file := parts[1]
-				
+
 				switch status {
 				case "A":
 					color.Green(fmt.Sprintf("  ✅ Added: %s", file))

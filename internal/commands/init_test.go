@@ -153,7 +153,7 @@ func TestInstallPostPushHook(t *testing.T) {
 				t.Errorf("Hook is not executable")
 			}
 		}
-		
+
 		// On Windows, also check that batch file was created
 		if utils.IsWindows() {
 			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
@@ -175,7 +175,7 @@ func TestInstallPostPushHook(t *testing.T) {
 
 	t.Run("PreserveExistingHook", func(t *testing.T) {
 		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-		
+
 		// Create existing hook with custom content
 		existingContent := "#!/bin/sh\necho 'Custom hook content'\n# Some existing functionality\n"
 		err := os.WriteFile(hookPath, []byte(existingContent), 0755)
@@ -205,7 +205,7 @@ func TestInstallPostPushHook(t *testing.T) {
 
 	t.Run("SkipIfAlreadyExists", func(t *testing.T) {
 		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-		
+
 		// Create hook that already contains timemachine cleanup
 		existingContent := "#!/bin/sh\necho 'Pre-existing hook'\ntimemachine clean --auto --quiet\n"
 		err := os.WriteFile(hookPath, []byte(existingContent), 0755)
@@ -321,14 +321,14 @@ func TestGitHookExecution(t *testing.T) {
 		}
 
 		testLogPath := filepath.Join(tempDir, "hook-test.log")
-		
+
 		if utils.IsWindows() {
 			// Windows test: Create a fake timemachine.exe or timemachine.bat
 			fakeTimemachineDir := filepath.Join(tempDir, "fake-bin")
 			if err := os.MkdirAll(fakeTimemachineDir, 0755); err != nil {
 				t.Fatalf("Failed to create fake bin directory: %v", err)
 			}
-			
+
 			fakeTimemachinePath := filepath.Join(fakeTimemachineDir, "timemachine.bat")
 			fakeBatchContent := `@echo off
 echo Cleanup executed at %DATE% %TIME% > "` + testLogPath + `"
@@ -338,10 +338,10 @@ exit /b 0
 			if err != nil {
 				t.Fatalf("Failed to create fake timemachine batch: %v", err)
 			}
-			
+
 			// Execute the Windows batch hook
 			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
-			
+
 			// Modify batch hook to use our fake timemachine
 			modifiedBatchContent := `@echo off
 REM Time Machine auto-cleanup
@@ -351,7 +351,7 @@ REM Time Machine auto-cleanup
 			if err != nil {
 				t.Fatalf("Failed to write modified batch hook: %v", err)
 			}
-			
+
 			// Execute the batch hook
 			cmd := exec.Command("cmd", "/c", batchHookPath)
 			cmd.Dir = tempDir
@@ -470,7 +470,7 @@ func TestInitCommand(t *testing.T) {
 	t.Run("InitializesCorrectly", func(t *testing.T) {
 		// Create init command
 		initCmd := InitCmd()
-		
+
 		// Execute init command
 		err := initCmd.RunE(initCmd, []string{})
 		if err != nil {
@@ -513,7 +513,7 @@ func TestInitCommand(t *testing.T) {
 				t.Errorf("Post-push hook is not executable")
 			}
 		}
-		
+
 		// On Windows, verify batch hook was also created
 		if utils.IsWindows() {
 			batchHookPath := filepath.Join(tempDir, ".git", "hooks", "post-push.bat")
