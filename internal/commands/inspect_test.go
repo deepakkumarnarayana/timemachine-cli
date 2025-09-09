@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -185,6 +186,169 @@ func TestSanitizeFilePath(t *testing.T) {
 	}
 }
 
+// TestSanitizeGitPath tests the git directory path sanitization function  
+func TestSanitizeGitPath(t *testing.T) {
+	// Base test cases that work on all platforms
+	testCases := []struct {
+		name      string
+		path      string
+		want      string
+		wantErr   bool
+		errMsgAny []string // Accept any of these error messages for cross-platform compatibility
+	}{
+		{
+			name:      "empty path not allowed",
+			path:      "",
+			wantErr:   true,
+			errMsgAny: []string{"empty path not allowed"},
+		},
+		{
+			name: "valid current directory",
+			path: ".",
+			want: ".",
+		},
+		{
+			name: "valid relative path",
+			path: ".git/timemachine_snapshots",
+			want: ".git/timemachine_snapshots",
+		},
+		{
+			name: "valid nested path",
+			path: "tmp/project/.git/timemachine_snapshots",
+			want: "tmp/project/.git/timemachine_snapshots",
+		},
+		{
+			name: "path with redundant separators",
+			path: "tmp//project//.git//timemachine_snapshots",
+			want: "tmp/project/.git/timemachine_snapshots",
+		},
+		{
+			name: "path with dot components that resolve locally",
+			path: "tmp/./project/./.git/timemachine_snapshots",
+			want: "tmp/project/.git/timemachine_snapshots",
+		},
+		{
+			name:      "parent directory traversal",
+			path:      "..",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		},
+		{
+			name:      "path traversal attack",
+			path:      "../etc/passwd",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		},
+		{
+			name:      "nested path traversal",
+			path:      "tmp/../../../etc/passwd",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		},
+		{
+			name:      "unix absolute path",
+			path:      "/tmp/project/.git",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		},
+		{
+			name:      "complex attack path",
+			path:      "tmp/project/../../../.ssh/id_rsa",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		},
+	}
+
+	// Add Windows-specific test cases when running on Windows  
+	// Note: filepath.IsLocal is platform-aware and only validates for the current OS
+	// On Linux, Windows paths like "C:\temp" are treated as valid relative filenames
+	if runtime.GOOS == "windows" {
+		windowsTests := []struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			{
+				name:      "windows absolute path with backslash",
+				path:      "C:\\temp\\project\\.git",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows absolute path with forward slash",
+				path:      "C:/temp/project/.git",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows UNC path",
+				path:      "\\\\server\\share\\.git",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows reserved device name",
+				path:      "NUL",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows reserved device name lowercase",
+				path:      "nul",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows COM port",
+				path:      "com1",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows LPT port",
+				path:      "lpt1",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+		}
+		testCases = append(testCases, windowsTests...)
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := sanitizeGitPath(tc.path)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("sanitizeGitPath(%q) expected error, got nil", tc.path)
+				} else if len(tc.errMsgAny) > 0 {
+					// Check if error message contains any of the expected messages
+					errStr := err.Error()
+					foundMatch := false
+					for _, expectedMsg := range tc.errMsgAny {
+						if strings.Contains(errStr, expectedMsg) {
+							foundMatch = true
+							break
+						}
+					}
+					if !foundMatch {
+						t.Errorf("sanitizeGitPath(%q) error = %v, want error containing one of %v",
+							tc.path, err, tc.errMsgAny)
+					}
+				}
+			} else {
+				if err != nil {
+					t.Errorf("sanitizeGitPath(%q) unexpected error: %v", tc.path, err)
+				}
+				if got != tc.want {
+					t.Errorf("sanitizeGitPath(%q) = %q, want %q", tc.path, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 // TestSecurityValidation tests that security validation is properly called
 func TestSecurityValidation(t *testing.T) {
 	// Test that the security functions are working correctly
@@ -224,6 +388,37 @@ func TestSecurityValidation(t *testing.T) {
 	for _, path := range badPaths {
 		if _, err := sanitizeFilePath(path); err == nil {
 			t.Errorf("sanitizeFilePath should reject malicious input: %q", path)
+		}
+	}
+
+	// Test git path validation with known bad inputs
+	// Platform-agnostic attacks that should be blocked on all systems
+	badGitPaths := []string{
+		"",                                 // Empty path
+		"..",                               // Parent directory
+		"../etc/passwd",                    // Path traversal
+		"/tmp/.git/timemachine_snapshots",  // Unix absolute path
+		"../../.git/timemachine_snapshots", // Multiple path traversal
+		"tmp/../../../.ssh/id_rsa",         // Complex traversal through valid directory
+	}
+
+	// Add platform-specific attacks
+	if runtime.GOOS == "windows" {
+		windowsBadPaths := []string{
+			"C:\\temp\\.git\\timemachine_snapshots", // Windows absolute path with backslash
+			"C:/temp/.git/timemachine_snapshots",    // Windows absolute path with forward slash
+			"\\\\server\\share\\.git",               // UNC path
+			"NUL",                                   // Windows reserved device name
+			"nul",                                   // Windows reserved device name (lowercase)
+			"com1",                                  // Windows COM port
+			"lpt1",                                  // Windows LPT port
+		}
+		badGitPaths = append(badGitPaths, windowsBadPaths...)
+	}
+
+	for _, path := range badGitPaths {
+		if _, err := sanitizeGitPath(path); err == nil {
+			t.Errorf("sanitizeGitPath should reject malicious input: %q", path)
 		}
 	}
 }

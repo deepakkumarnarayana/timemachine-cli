@@ -13,33 +13,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Security validation patterns
-var (
-	// gitDirPattern validates git directory paths to prevent injection (cross-platform)
-	gitDirPattern = regexp.MustCompile(`^[a-zA-Z0-9._/\\:\-\s]+$`)
-)
-
-// sanitizeGitPath validates and sanitizes git directory paths (cross-platform)
+// sanitizeGitPath validates and sanitizes git directory paths using Go's built-in security functions
 func sanitizeGitPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Clean the path to resolve . and .. elements (cross-platform)
+	// Use Go's built-in security validation (Go 1.20+)
+	// This handles cross-platform path traversal prevention automatically
+	if !filepath.IsLocal(path) {
+		return "", fmt.Errorf("path must be local and relative")
+	}
+
+	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
-
-	// Convert to normalized form for consistent checking
-	normalized := filepath.ToSlash(cleaned)
-
-	// Prevent path traversal attacks (check after normalization)
-	if strings.Contains(normalized, "..") {
-		return "", fmt.Errorf("path traversal not allowed")
-	}
-
-	// Validate against allowed characters (cross-platform: includes backslashes and colons)
-	if !gitDirPattern.MatchString(cleaned) {
-		return "", fmt.Errorf("invalid characters in path")
-	}
 
 	return cleaned, nil
 }
