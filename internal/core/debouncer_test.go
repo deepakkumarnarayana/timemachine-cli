@@ -185,7 +185,7 @@ func TestDebouncer_DifferentDelays(t *testing.T) {
 		time.Sleep(test.delay * 3)
 
 		if atomic.LoadInt64(&executed) != test.expected {
-			t.Errorf("For delay %v, expected %d executions, got %d", 
+			t.Errorf("For delay %v, expected %d executions, got %d",
 				test.delay, test.expected, executed)
 		}
 	}

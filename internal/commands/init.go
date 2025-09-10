@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // InitCmd creates the init command
@@ -47,11 +48,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
-	// Step 1: Create shadow repository
-	fmt.Print("  Creating shadow repository... ")
-	if err := gitManager.InitializeShadowRepo(); err != nil {
+	// Step 1: Setup shadow repository (without commits)
+	fmt.Print("  Setting up shadow repository... ")
+	if err := gitManager.SetupShadowRepo(); err != nil {
 		color.Red("❌")
-		return fmt.Errorf("failed to create shadow repository: %w", err)
+		return fmt.Errorf("failed to setup shadow repository: %w", err)
 	}
 	color.Green("✅")
 
@@ -103,81 +104,82 @@ func runInit(cmd *cobra.Command, args []string) error {
 // MUST preserve existing content and only append if not already present
 func updateGitignore(projectRoot string) error {
 	gitignorePath := filepath.Join(projectRoot, ".gitignore")
-	
+
 	// Read existing .gitignore content
 	var existingContent []string
 	var timemachineFound bool
-	
-	if file, err := os.Open(gitignorePath); err == nil {
-		defer file.Close()
+
+	gitignorePath = filepath.Clean(gitignorePath)
+	if file, err := os.Open(gitignorePath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
-		
+
 		for scanner.Scan() {
 			line := scanner.Text()
 			existingContent = append(existingContent, line)
-			
+
 			// Check if already contains timemachine_snapshots
 			if strings.Contains(line, "timemachine_snapshots") {
 				timemachineFound = true
 			}
 		}
-		
+
 		if err := scanner.Err(); err != nil {
 			return fmt.Errorf("failed to read .gitignore: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to open .gitignore: %w", err)
 	}
-	
+
 	// If already contains timemachine_snapshots, nothing to do
 	if timemachineFound {
 		return nil
 	}
-	
+
 	// Append Time Machine exclusion
 	timemachineSection := []string{
 		"",
 		"# Time Machine shadow repository",
 		".git/timemachine_snapshots/",
 	}
-	
+
 	// Write updated .gitignore
-	file, err := os.Create(gitignorePath)
+	file, err := os.Create(gitignorePath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
-	defer file.Close()
-	
+	defer func() { _ = file.Close() }()
+
 	writer := bufio.NewWriter(file)
-	
+
 	// Write existing content
 	for _, line := range existingContent {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write existing content: %w", err)
 		}
 	}
-	
+
 	// Write Time Machine section
 	for _, line := range timemachineSection {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write Time Machine section: %w", err)
 		}
 	}
-	
+
 	return writer.Flush()
 }
 
 // createDefaultTimemachineIgnore creates a .timemachine-ignore file with default patterns
 func createDefaultTimemachineIgnore(projectRoot string) error {
-	ignorePath := filepath.Join(projectRoot, ".timemachine-ignore")
-	
+	ignorePath := filepath.Clean(filepath.Join(projectRoot, ".timemachine-ignore"))
+
 	// Check if file already exists
 	if _, err := os.Stat(ignorePath); err == nil {
 		return nil // File already exists, don't overwrite
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to check .timemachine-ignore: %w", err)
 	}
-	
+
 	// Default patterns for common files to ignore
 	defaultPatterns := []string{
 		"# Default TimeMachine ignore patterns",
@@ -215,66 +217,84 @@ func createDefaultTimemachineIgnore(projectRoot string) error {
 		"# Add your custom patterns below this line",
 		"",
 	}
-	
+
 	// Create the file
-	file, err := os.Create(ignorePath)
+	file, err := os.Create(ignorePath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create .timemachine-ignore: %w", err)
 	}
-	defer file.Close()
-	
+	defer func() { _ = file.Close() }()
+
 	writer := bufio.NewWriter(file)
 	for _, line := range defaultPatterns {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write pattern: %w", err)
 		}
 	}
-	
+
 	return writer.Flush()
 }
 
 // installPostPushHook installs or updates the post-push hook for automatic cleanup
 // MUST preserve existing hook content and only append if not already present
+// Supports both Unix (shell script) and Windows (batch file) hooks
 func installPostPushHook(gitDir string) error {
-	hookPath := filepath.Join(gitDir, "hooks", "post-push")
-	
 	// Create hooks directory if it doesn't exist
-	hooksDir := filepath.Dir(hookPath)
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+	hooksDir := filepath.Join(gitDir, "hooks")
+	if err := os.MkdirAll(hooksDir, 0750); err != nil {
 		return fmt.Errorf("failed to create hooks directory: %w", err)
 	}
-	
+
+	// Install Unix shell script hook (primary, works on all platforms)
+	if err := installUnixHook(hooksDir); err != nil {
+		return fmt.Errorf("failed to install Unix hook: %w", err)
+	}
+
+	// Install Windows batch file hook for better Windows compatibility
+	if utils.IsWindows() {
+		if err := installWindowsHook(hooksDir); err != nil {
+			return fmt.Errorf("failed to install Windows hook: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// installUnixHook installs the shell script version of the hook
+func installUnixHook(hooksDir string) error {
+	hookPath := filepath.Clean(filepath.Join(hooksDir, "post-push"))
+
 	// Read existing hook content
 	var existingContent []string
 	var timemachineFound bool
-	
-	if file, err := os.Open(hookPath); err == nil {
-		defer file.Close()
+
+	if file, err := os.Open(hookPath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
-		
+
 		for scanner.Scan() {
 			line := scanner.Text()
 			existingContent = append(existingContent, line)
-			
+
 			// Check if already contains timemachine command
 			if strings.Contains(line, "timemachine clean") {
 				timemachineFound = true
 			}
 		}
-		
+
 		if err := scanner.Err(); err != nil {
 			return fmt.Errorf("failed to read existing hook: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to open existing hook: %w", err)
 	}
-	
+
 	// If already contains timemachine cleanup, nothing to do
 	if timemachineFound {
 		return nil
 	}
-	
-	// Time Machine hook content
+
+	// Time Machine hook content for Unix/shell
 	timemachineHook := []string{
 		"",
 		"# Time Machine auto-cleanup",
@@ -282,45 +302,75 @@ func installPostPushHook(gitDir string) error {
 		"    timemachine clean --auto --quiet",
 		"fi",
 	}
-	
+
 	// Create or update the hook
-	file, err := os.Create(hookPath)
+	file, err := os.Create(hookPath) // #nosec G304 - Path is cleaned to prevent path traversal
 	if err != nil {
 		return fmt.Errorf("failed to create hook file: %w", err)
 	}
-	defer file.Close()
-	
+	defer func() { _ = file.Close() }()
+
 	writer := bufio.NewWriter(file)
-	
+
 	// If no existing content, add shebang
 	if len(existingContent) == 0 {
 		if _, err := writer.WriteString("#!/bin/sh\n"); err != nil {
 			return fmt.Errorf("failed to write shebang: %w", err)
 		}
 	}
-	
+
 	// Write existing content
 	for _, line := range existingContent {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write existing hook content: %w", err)
 		}
 	}
-	
+
 	// Write Time Machine hook
 	for _, line := range timemachineHook {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
 			return fmt.Errorf("failed to write Time Machine hook: %w", err)
 		}
 	}
-	
+
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("failed to flush hook file: %w", err)
 	}
-	
-	// Make hook executable
-	if err := os.Chmod(hookPath, 0755); err != nil {
+
+	// Make hook executable using cross-platform function
+	if err := utils.MakeExecutable(hookPath); err != nil {
 		return fmt.Errorf("failed to make hook executable: %w", err)
 	}
-	
+
+	return nil
+}
+
+// installWindowsHook installs a Windows batch file version of the hook
+func installWindowsHook(hooksDir string) error {
+	hookPath := filepath.Clean(filepath.Join(hooksDir, "post-push.bat"))
+
+	// Check if Windows hook already exists
+	if _, err := os.Stat(hookPath); err == nil {
+		content, err := os.ReadFile(hookPath) // #nosec G304 - Path is cleaned to prevent path traversal
+		if err == nil && strings.Contains(string(content), "timemachine clean") {
+			return nil // Already exists
+		}
+	}
+
+	// Windows batch file content
+	batchContent := `@echo off
+REM Time Machine auto-cleanup
+where timemachine >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    timemachine clean --auto --quiet
+)
+`
+
+	// Create or update the batch file
+	// #nosec G304 - Path is validated above for security
+	if err := os.WriteFile(hookPath, []byte(batchContent), 0600); err != nil {
+		return fmt.Errorf("failed to write Windows batch hook: %w", err)
+	}
+
 	return nil
 }

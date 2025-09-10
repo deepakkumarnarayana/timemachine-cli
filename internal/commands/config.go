@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // ConfigCmd creates the config command with subcommands
@@ -172,7 +172,7 @@ func initGlobalConfig(force bool) error {
 	configPath := filepath.Join(configDir, "timemachine.yaml")
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -241,12 +241,12 @@ ui:
   pager: %s
   table_format: %s
 `,
-				state.Config.Log.Level, state.Config.Log.Format, state.Config.Log.File,
-				state.Config.Watcher.DebounceDelay, state.Config.Watcher.MaxWatchedFiles, state.Config.Watcher.IgnorePatterns,
-				state.Config.Watcher.BatchSize, state.Config.Watcher.EnableRecursive,
-				state.Config.Cache.MaxEntries, state.Config.Cache.MaxMemoryMB, state.Config.Cache.TTL, state.Config.Cache.EnableLRU,
-				state.Config.Git.CleanupThreshold, state.Config.Git.AutoGC, state.Config.Git.MaxCommits, state.Config.Git.UseShallowClone,
-				state.Config.UI.ProgressIndicators, state.Config.UI.ColorOutput, state.Config.UI.Pager, state.Config.UI.TableFormat)
+			state.Config.Log.Level, state.Config.Log.Format, state.Config.Log.File,
+			state.Config.Watcher.DebounceDelay, state.Config.Watcher.MaxWatchedFiles, state.Config.Watcher.IgnorePatterns,
+			state.Config.Watcher.BatchSize, state.Config.Watcher.EnableRecursive,
+			state.Config.Cache.MaxEntries, state.Config.Cache.MaxMemoryMB, state.Config.Cache.TTL, state.Config.Cache.EnableLRU,
+			state.Config.Git.CleanupThreshold, state.Config.Git.AutoGC, state.Config.Git.MaxCommits, state.Config.Git.UseShallowClone,
+			state.Config.UI.ProgressIndicators, state.Config.UI.ColorOutput, state.Config.UI.Pager, state.Config.UI.TableFormat)
 	case "json":
 		// Convert to JSON (simplified version)
 		fmt.Printf(`{
@@ -327,7 +327,7 @@ func setConfigValue(key, value string, global bool) error {
 
 	color.Yellow("⚠️  Configuration modification not yet implemented")
 	fmt.Println("For now, please edit the configuration file directly:")
-	
+
 	if global {
 		userConfigDir, _ := os.UserConfigDir()
 		fmt.Printf("  %s/timemachine/timemachine.yaml\n", userConfigDir)

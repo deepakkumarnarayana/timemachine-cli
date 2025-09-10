@@ -1,0 +1,8 @@
+{
+    "severity": "medium",
+    "confidence": "medium",
+    "exclude-generated": true,
+    "nosec": true,
+    "nosec-tag": "nosec",
+    "tests": true
+}

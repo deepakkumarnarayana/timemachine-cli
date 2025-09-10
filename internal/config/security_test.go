@@ -23,49 +23,49 @@ func TestSecurityPathTraversal(t *testing.T) {
 		{"basic_dotdot", "../../../etc/passwd", "basic directory traversal"},
 		{"relative_dotdot", "logs/../../../etc/passwd", "relative path with traversal"},
 		{"absolute_dotdot", "/tmp/../../../etc/passwd", "absolute path with traversal"},
-		
+
 		// URL encoded attacks
 		{"url_encoded_basic", "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd", "URL encoded path traversal"},
 		{"url_encoded_mixed", "../%2e%2e/%2e%2e/etc/passwd", "mixed encoding path traversal"},
 		{"double_url_encoded", "%252e%252e%252f", "double URL encoded"},
-		
+
 		// Unicode attacks
 		{"unicode_dotdot", "\u002e\u002e\u002f\u002e\u002e\u002f", "Unicode encoded dots"},
 		{"unicode_fullwidth", "\uff0e\uff0e\uff0f", "Unicode fullwidth characters"},
-		
+
 		// Windows path traversal
 		{"windows_backslash", "..\\..\\..\\windows\\system32\\config", "Windows backslash traversal"},
 		{"windows_mixed", "../..\\windows/system32", "mixed Windows/Unix separators"},
 		{"windows_unc", "\\\\server\\share\\..\\..\\system", "Windows UNC path traversal"},
-		
+
 		// Null byte injection
 		{"null_byte_1", "../../../etc/passwd\x00.log", "null byte injection"},
 		{"null_byte_2", "/etc/passwd\x00", "null byte termination"},
-		
+
 		// Overlong UTF-8
 		{"overlong_utf8", "\xc0\xae\xc0\xae/", "overlong UTF-8 encoding"},
-		
+
 		// Case variations
 		{"case_variation_1", "../../../ETC/PASSWD", "uppercase variations"},
 		{"case_variation_2", "../../../Etc/Passwd", "mixed case variations"},
-		
+
 		// Space and control character attacks
 		{"leading_spaces", "   ../../../etc/passwd", "leading spaces"},
 		{"trailing_spaces", "../../../etc/passwd   ", "trailing spaces"},
 		{"tab_chars", "\t../../../etc/passwd", "tab characters"},
 		{"newline_chars", "\n../../../etc/passwd", "newline injection"},
 		{"carriage_return", "\r../../../etc/passwd", "carriage return injection"},
-		
+
 		// Multiple encoding attacks
 		{"hex_encoded", "\x2e\x2e\x2f\x2e\x2e\x2f", "hex encoded traversal"},
 		{"base64_like", "Li4vLi4vLi4v", "base64-like encoding (not actually decoded)"},
-		
+
 		// Symbolic link style attacks
 		{"symlink_style", "logs -> ../../../etc/passwd", "symbolic link style"},
-		
+
 		// Long path attacks
 		{"long_path", strings.Repeat("../", 1000) + "etc/passwd", "extremely long path traversal"},
-		
+
 		// Mixed attacks
 		{"mixed_attack_1", "%2e%2e/..\\..%2f%2e%2e/etc/passwd", "mixed encoding and separators"},
 		{"mixed_attack_2", "../\x2e\x2e/%2e%2e/etc/passwd", "hex, URL, and plain encoding"},
@@ -101,8 +101,8 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 	for _, test := range maliciousEnvVars {
 		t.Run(test.name, func(t *testing.T) {
 			// Set the malicious environment variable
-			os.Setenv(test.envVar, "malicious_value")
-			defer os.Unsetenv(test.envVar)
+			_ = os.Setenv(test.envVar, "malicious_value")
+			defer func() { _ = os.Unsetenv(test.envVar) }()
 
 			// Create manager and load config
 			manager := NewManager()
@@ -110,7 +110,7 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 			err = manager.Load(tempDir)
 			if err != nil {
@@ -133,7 +133,7 @@ func TestSecurityFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	manager := NewManager()
 	err = manager.CreateDefaultConfigFile(tempDir)
@@ -150,7 +150,7 @@ func TestSecurityFilePermissions(t *testing.T) {
 	// Check permissions (should be 0600 - owner read/write only)
 	perm := fileInfo.Mode().Perm()
 	expectedPerm := os.FileMode(0600)
-	
+
 	if perm != expectedPerm {
 		t.Errorf("Security vulnerability: config file has incorrect permissions %o, expected %o", perm, expectedPerm)
 	}
@@ -205,7 +205,7 @@ log:
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 			configPath := filepath.Join(tempDir, "timemachine.yaml")
 			err = os.WriteFile(configPath, []byte(test.content), 0600)
@@ -235,7 +235,7 @@ func TestSecurityLargeConfigFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create a very large config file (but not so large it breaks the test system)
 	largeContent := "log:\n  level: info\n"
@@ -249,7 +249,7 @@ func TestSecurityLargeConfigFiles(t *testing.T) {
 	}
 
 	manager := NewManager()
-	
+
 	// This should either handle gracefully or fail with proper error
 	// The key is it shouldn't cause memory exhaustion or hang
 	err = manager.Load(tempDir)
@@ -274,9 +274,9 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 
 	// Save original environment
 	originalHome := os.Getenv("HOME")
-	
+
 	defer func() {
-		os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", originalHome)
 	}()
 
 	tests := []struct {
@@ -293,7 +293,7 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 			desc:     "safe temporary directory",
 		},
 		{
-			name:     "safe_var_log_path", 
+			name:     "safe_var_log_path",
 			path:     "/var/log/app.log",
 			expected: true,
 			desc:     "safe system log directory",
@@ -320,7 +320,7 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 			name: "safe_home_path",
 			path: "/home/user/.config/app.log",
 			setupFunc: func() {
-				os.Setenv("HOME", "/home/user")
+				_ = os.Setenv("HOME", "/home/user")
 			},
 			expected: true,
 			desc:     "safe user home directory",
@@ -344,7 +344,7 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 			if test.setupFunc != nil {
 				test.setupFunc()
 			}
-			
+
 			result := validator.isValidFilePath(test.path)
 			if result != test.expected {
 				t.Errorf("Security test '%s' failed: path '%s' returned %v, expected %v (%s)",
@@ -381,7 +381,7 @@ func TestSecurityURLDecodingEdgeCases(t *testing.T) {
 			if err == nil && strings.Contains(decoded, "..") {
 				t.Logf("URL decoding detected traversal in %s -> %s", attack.path, decoded)
 			}
-			
+
 			// Then verify our validator blocks it
 			if validator.isValidFilePath(attack.path) {
 				t.Errorf("Security vulnerability: URL encoding attack '%s' was allowed: %s (%s)",
@@ -394,15 +394,15 @@ func TestSecurityURLDecodingEdgeCases(t *testing.T) {
 // TestSecurityConcurrentAccess tests thread safety of validation
 func TestSecurityConcurrentAccess(t *testing.T) {
 	validator := NewValidator()
-	
+
 	// Test concurrent access to validator methods
 	numGoroutines := 100
 	done := make(chan bool, numGoroutines)
-	
+
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
-			
+
 			// Test various validation methods concurrently
 			testPaths := []string{
 				"/tmp/safe.log",
@@ -410,11 +410,11 @@ func TestSecurityConcurrentAccess(t *testing.T) {
 				"/home/user/app.log",
 				fmt.Sprintf("/tmp/test_%d.log", id),
 			}
-			
+
 			for _, path := range testPaths {
 				validator.isValidFilePath(path)
 			}
-			
+
 			// Test config validation
 			config := &Config{
 				Log: LogConfig{
@@ -423,10 +423,10 @@ func TestSecurityConcurrentAccess(t *testing.T) {
 					File:   fmt.Sprintf("/tmp/concurrent_%d.log", id),
 				},
 			}
-			validator.validateLogConfig(&config.Log)
+			_ = validator.validateLogConfig(&config.Log)
 		}(i)
 	}
-	
+
 	// Wait for all goroutines to complete
 	for i := 0; i < numGoroutines; i++ {
 		<-done

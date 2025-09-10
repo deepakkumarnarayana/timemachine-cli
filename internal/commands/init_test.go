@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
 )
 
 func TestUpdateGitignore(t *testing.T) {
@@ -17,7 +18,7 @@ func TestUpdateGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	t.Run("CreateNewGitignore", func(t *testing.T) {
 		err := updateGitignore(tempDir)
@@ -110,7 +111,7 @@ func TestInstallPostPushHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	gitDir := filepath.Join(tempDir, ".git")
 	err = os.MkdirAll(gitDir, 0755)
@@ -142,19 +143,39 @@ func TestInstallPostPushHook(t *testing.T) {
 			t.Errorf("Hook does not contain timemachine comment")
 		}
 
-		// Check hook is executable
-		stat, err := os.Stat(hookPath)
-		if err != nil {
-			t.Fatalf("Failed to stat hook: %v", err)
+		// Check hook is executable (Unix only - Windows doesn't have executable permissions)
+		if !utils.IsWindows() {
+			stat, err := os.Stat(hookPath)
+			if err != nil {
+				t.Fatalf("Failed to stat hook: %v", err)
+			}
+			if stat.Mode()&0111 == 0 {
+				t.Errorf("Hook is not executable")
+			}
 		}
-		if stat.Mode()&0111 == 0 {
-			t.Errorf("Hook is not executable")
+
+		// On Windows, also check that batch file was created
+		if utils.IsWindows() {
+			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
+			if _, err := os.Stat(batchHookPath); err != nil {
+				t.Errorf("Windows batch hook was not created: %v", err)
+			} else {
+				// Check batch file content
+				batchContent, err := os.ReadFile(batchHookPath)
+				if err != nil {
+					t.Fatalf("Failed to read Windows batch hook: %v", err)
+				}
+				batchStr := string(batchContent)
+				if !strings.Contains(batchStr, "timemachine clean --auto --quiet") {
+					t.Errorf("Windows batch hook does not contain timemachine cleanup command")
+				}
+			}
 		}
 	})
 
 	t.Run("PreserveExistingHook", func(t *testing.T) {
 		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-		
+
 		// Create existing hook with custom content
 		existingContent := "#!/bin/sh\necho 'Custom hook content'\n# Some existing functionality\n"
 		err := os.WriteFile(hookPath, []byte(existingContent), 0755)
@@ -184,7 +205,7 @@ func TestInstallPostPushHook(t *testing.T) {
 
 	t.Run("SkipIfAlreadyExists", func(t *testing.T) {
 		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-		
+
 		// Create hook that already contains timemachine cleanup
 		existingContent := "#!/bin/sh\necho 'Pre-existing hook'\ntimemachine clean --auto --quiet\n"
 		err := os.WriteFile(hookPath, []byte(existingContent), 0755)
@@ -229,7 +250,7 @@ func TestGitHookExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	gitDir := filepath.Join(tempDir, ".git")
 	err = os.MkdirAll(gitDir, 0755)
@@ -246,13 +267,20 @@ func TestGitHookExecution(t *testing.T) {
 
 		hookPath := filepath.Join(gitDir, "hooks", "post-push")
 
-		// Check hook exists and is executable
-		stat, err := os.Stat(hookPath)
-		if err != nil {
+		// Check hook exists
+		if _, err := os.Stat(hookPath); err != nil {
 			t.Fatalf("Hook file does not exist: %v", err)
 		}
-		if stat.Mode()&0111 == 0 {
-			t.Errorf("Hook is not executable")
+
+		// Check executable permissions on Unix systems only
+		if !utils.IsWindows() {
+			stat, err := os.Stat(hookPath)
+			if err != nil {
+				t.Fatalf("Failed to stat hook file: %v", err)
+			}
+			if stat.Mode()&0111 == 0 {
+				t.Errorf("Hook is not executable on Unix system")
+			}
 		}
 
 		// Read hook content
@@ -269,10 +297,19 @@ func TestGitHookExecution(t *testing.T) {
 			t.Errorf("Hook does not contain timemachine cleanup command")
 		}
 
-		// Test hook syntax by running it with sh -n (syntax check only)
-		cmd := exec.Command("sh", "-n", hookPath)
-		if err := cmd.Run(); err != nil {
-			t.Errorf("Hook has syntax errors: %v", err)
+		// Test hook syntax by running it with appropriate shell
+		if !utils.IsWindows() {
+			// Unix: Test shell syntax with sh -n
+			cmd := exec.Command("sh", "-n", hookPath)
+			if err := cmd.Run(); err != nil {
+				t.Errorf("Hook has syntax errors: %v", err)
+			}
+		} else {
+			// Windows: Check that batch file was also created and is valid
+			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
+			if _, err := os.Stat(batchHookPath); err != nil {
+				t.Errorf("Windows batch hook was not created: %v", err)
+			}
 		}
 	})
 
@@ -283,40 +320,79 @@ func TestGitHookExecution(t *testing.T) {
 			t.Fatalf("Failed to install hook: %v", err)
 		}
 
-		// Create a test script that mimics timemachine
-		testScriptPath := filepath.Join(tempDir, "fake-timemachine")
-		testScript := `#!/bin/sh
-echo "Cleanup executed at $(date)" > ` + filepath.Join(tempDir, "hook-test.log") + `
+		testLogPath := filepath.Join(tempDir, "hook-test.log")
+
+		if utils.IsWindows() {
+			// Windows test: Create a fake timemachine.exe or timemachine.bat
+			fakeTimemachineDir := filepath.Join(tempDir, "fake-bin")
+			if err := os.MkdirAll(fakeTimemachineDir, 0755); err != nil {
+				t.Fatalf("Failed to create fake bin directory: %v", err)
+			}
+
+			fakeTimemachinePath := filepath.Join(fakeTimemachineDir, "timemachine.bat")
+			fakeBatchContent := `@echo off
+echo Cleanup executed at %DATE% %TIME% > "` + testLogPath + `"
+exit /b 0
+`
+			err = os.WriteFile(fakeTimemachinePath, []byte(fakeBatchContent), 0644)
+			if err != nil {
+				t.Fatalf("Failed to create fake timemachine batch: %v", err)
+			}
+
+			// Execute the Windows batch hook
+			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
+
+			// Modify batch hook to use our fake timemachine
+			modifiedBatchContent := `@echo off
+REM Time Machine auto-cleanup
+"` + fakeTimemachinePath + `" clean --auto --quiet
+`
+			err = os.WriteFile(batchHookPath, []byte(modifiedBatchContent), 0644)
+			if err != nil {
+				t.Fatalf("Failed to write modified batch hook: %v", err)
+			}
+
+			// Execute the batch hook
+			cmd := exec.Command("cmd", "/c", batchHookPath)
+			cmd.Dir = tempDir
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Failed to execute Windows batch hook: %v", err)
+			}
+		} else {
+			// Unix test: Create a test script that mimics timemachine
+			testScriptPath := filepath.Join(tempDir, "fake-timemachine")
+			testScript := `#!/bin/sh
+echo "Cleanup executed at $(date)" > "` + testLogPath + `"
 exit 0
 `
-		err = os.WriteFile(testScriptPath, []byte(testScript), 0755)
-		if err != nil {
-			t.Fatalf("Failed to create test script: %v", err)
-		}
+			err = os.WriteFile(testScriptPath, []byte(testScript), 0755)
+			if err != nil {
+				t.Fatalf("Failed to create test script: %v", err)
+			}
 
-		// Create a modified hook that uses our test script
-		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-		testHookContent := `#!/bin/sh
+			// Create a modified hook that uses our test script
+			hookPath := filepath.Join(gitDir, "hooks", "post-push")
+			testHookContent := `#!/bin/sh
 
 # Time Machine auto-cleanup
 if command -v ` + testScriptPath + ` >/dev/null 2>&1; then
     ` + testScriptPath + ` --auto --quiet
 fi
 `
-		err = os.WriteFile(hookPath, []byte(testHookContent), 0755)
-		if err != nil {
-			t.Fatalf("Failed to write test hook: %v", err)
-		}
+			err = os.WriteFile(hookPath, []byte(testHookContent), 0755)
+			if err != nil {
+				t.Fatalf("Failed to write test hook: %v", err)
+			}
 
-		// Execute the hook directly
-		cmd := exec.Command(hookPath)
-		cmd.Dir = tempDir
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("Failed to execute hook: %v", err)
+			// Execute the hook directly
+			cmd := exec.Command(hookPath)
+			cmd.Dir = tempDir
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Failed to execute hook: %v", err)
+			}
 		}
 
 		// Check if our test script was executed
-		testLogPath := filepath.Join(tempDir, "hook-test.log")
 		if _, err := os.Stat(testLogPath); os.IsNotExist(err) {
 			t.Errorf("Hook did not execute test command - log file not found")
 		} else {
@@ -337,14 +413,24 @@ fi
 			t.Fatalf("Failed to install hook: %v", err)
 		}
 
-		hookPath := filepath.Join(gitDir, "hooks", "post-push")
-
 		// Execute the hook directly (timemachine command won't be found)
 		// This should not fail - the hook should gracefully handle missing command
-		cmd := exec.Command(hookPath)
-		cmd.Dir = tempDir
-		if err := cmd.Run(); err != nil {
-			t.Errorf("Hook should not fail when timemachine command is not found: %v", err)
+		if utils.IsWindows() {
+			// Test Windows batch hook
+			batchHookPath := filepath.Join(gitDir, "hooks", "post-push.bat")
+			cmd := exec.Command("cmd", "/c", batchHookPath)
+			cmd.Dir = tempDir
+			if err := cmd.Run(); err != nil {
+				t.Errorf("Windows batch hook should not fail when timemachine command is not found: %v", err)
+			}
+		} else {
+			// Test Unix shell hook
+			hookPath := filepath.Join(gitDir, "hooks", "post-push")
+			cmd := exec.Command(hookPath)
+			cmd.Dir = tempDir
+			if err := cmd.Run(); err != nil {
+				t.Errorf("Unix hook should not fail when timemachine command is not found: %v", err)
+			}
 		}
 	})
 }
@@ -355,7 +441,7 @@ func TestInitCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Initialize git repository
 	if _, err := exec.LookPath("git"); err != nil {
@@ -371,20 +457,20 @@ func TestInitCommand(t *testing.T) {
 	// Configure git
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 
 	// Change to temp directory for testing
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(tempDir)
+	defer func() { _ = os.Chdir(originalDir) }()
+	_ = os.Chdir(tempDir)
 
 	t.Run("InitializesCorrectly", func(t *testing.T) {
 		// Create init command
 		initCmd := InitCmd()
-		
+
 		// Execute init command
 		err := initCmd.RunE(initCmd, []string{})
 		if err != nil {
@@ -417,13 +503,23 @@ func TestInitCommand(t *testing.T) {
 			t.Errorf("Post-push hook was not installed correctly")
 		}
 
-		// Verify hook is executable
-		stat, err := os.Stat(hookPath)
-		if err != nil {
-			t.Fatalf("Failed to stat hook: %v", err)
+		// Verify hook is executable (Unix only)
+		if !utils.IsWindows() {
+			stat, err := os.Stat(hookPath)
+			if err != nil {
+				t.Fatalf("Failed to stat hook: %v", err)
+			}
+			if stat.Mode()&0111 == 0 {
+				t.Errorf("Post-push hook is not executable")
+			}
 		}
-		if stat.Mode()&0111 == 0 {
-			t.Errorf("Post-push hook is not executable")
+
+		// On Windows, verify batch hook was also created
+		if utils.IsWindows() {
+			batchHookPath := filepath.Join(tempDir, ".git", "hooks", "post-push.bat")
+			if _, err := os.Stat(batchHookPath); err != nil {
+				t.Errorf("Windows batch hook was not created: %v", err)
+			}
 		}
 
 		// Verify initial snapshot was created

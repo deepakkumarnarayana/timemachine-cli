@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // StartCmd creates the start command
@@ -71,7 +71,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		watcher.Stop()
 		fmt.Println("✅ Time Machine stopped gracefully")
 		return nil
-		
+
 	case err := <-errChan:
 		watcher.Stop()
 		return fmt.Errorf("watcher error: %w", err)

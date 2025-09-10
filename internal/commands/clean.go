@@ -7,19 +7,20 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/utils"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 // CleanCmd creates the clean command
 func CleanCmd() *cobra.Command {
 	var (
-		auto    bool
-		quiet   bool
-		keep    int
+		auto      bool
+		quiet     bool
+		keep      int
 		olderThan string
+		destroy   bool
 	)
 
 	cmd := &cobra.Command{
@@ -27,18 +28,20 @@ func CleanCmd() *cobra.Command {
 		Short: "Clean up snapshots to save disk space",
 		Long: `Clean up Time Machine snapshots to save disk space.
 
-By default, removes all snapshots after confirmation.
+By default, removes all snapshots but keeps the shadow repository initialized.
 Use --keep to retain the N most recent snapshots.
 Use --older-than to remove snapshots older than specified duration (e.g., "7d", "2w", "1m").
+Use --destroy to completely remove the shadow repository (requires re-initialization).
 
 Examples:
-  timemachine clean                    # Remove all snapshots (with confirmation)
+  timemachine clean                    # Remove all snapshots, stay initialized
   timemachine clean --auto            # Remove all snapshots (no confirmation)
+  timemachine clean --destroy         # Complete removal (requires timemachine init again)
   timemachine clean --keep 10         # Keep 10 most recent snapshots
   timemachine clean --older-than 1w   # Remove snapshots older than 1 week
   timemachine clean --auto --quiet    # Silent cleanup (used by post-push hook)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClean(auto, quiet, keep, olderThan)
+			return runClean(auto, quiet, keep, olderThan, destroy)
 		},
 	}
 
@@ -47,11 +50,12 @@ Examples:
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress output (useful for automation)")
 	cmd.Flags().IntVar(&keep, "keep", 0, "Keep N most recent snapshots (0 = remove all)")
 	cmd.Flags().StringVar(&olderThan, "older-than", "", "Remove snapshots older than duration (e.g., 7d, 2w, 1m)")
+	cmd.Flags().BoolVar(&destroy, "destroy", false, "Completely remove shadow repository (requires re-initialization)")
 
 	return cmd
 }
 
-func runClean(auto, quiet bool, keep int, olderThan string) error {
+func runClean(auto, quiet bool, keep int, olderThan string, destroy bool) error {
 	// Create application state
 	state, err := core.NewAppState()
 	if err != nil {
@@ -132,9 +136,9 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 			// Show all snapshots to be removed if not too many
 			fmt.Println("\nSnapshots to remove:")
 			for _, snapshot := range snapshotsToRemove {
-				fmt.Printf("  • %s  %s  %s\n", 
-					snapshot.Hash[:8], 
-					utils.TruncateString(snapshot.Message, 40), 
+				fmt.Printf("  • %s  %s  %s\n",
+					snapshot.Hash[:8],
+					utils.TruncateString(snapshot.Message, 40),
 					snapshot.Time)
 			}
 		} else {
@@ -144,9 +148,9 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 				if i >= 3 {
 					break
 				}
-				fmt.Printf("  • %s  %s  %s\n", 
-					snapshot.Hash[:8], 
-					utils.TruncateString(snapshot.Message, 40), 
+				fmt.Printf("  • %s  %s  %s\n",
+					snapshot.Hash[:8],
+					utils.TruncateString(snapshot.Message, 40),
 					snapshot.Time)
 			}
 		}
@@ -156,13 +160,13 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 	// Ask for confirmation unless --auto
 	if !auto && !quiet {
 		fmt.Print("Do you want to continue? (y/N): ")
-		
+
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read confirmation: %w", err)
 		}
-		
+
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
 			fmt.Println("Cleanup cancelled.")
@@ -176,8 +180,8 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 		fmt.Print("🧹 Cleaning up snapshots... ")
 	}
 
-	if keep == 0 && olderThan == "" {
-		// Remove entire shadow repository for complete cleanup
+	if keep == 0 && olderThan == "" && destroy {
+		// Complete destruction: remove entire shadow repository
 		err = os.RemoveAll(state.ShadowRepoDir)
 		if err != nil {
 			if !quiet {
@@ -185,9 +189,19 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 			}
 			return fmt.Errorf("failed to remove shadow repository: %w", err)
 		}
-		
+
 		// Update state
 		state.IsInitialized = false
+	} else if keep == 0 && olderThan == "" {
+		// Clean but preserve: remove all commits but recreate fresh repository
+		err = cleanAndRecreateRepository(gitManager)
+		if err != nil {
+			if !quiet {
+				color.Red("❌")
+			}
+			return fmt.Errorf("failed to clean and recreate repository: %w", err)
+		}
+		// Keep state.IsInitialized = true
 	} else {
 		// Remove specific commits (more complex, but preserves repository)
 		// For now, we'll use the simple approach of recreating with kept snapshots
@@ -203,10 +217,13 @@ func runClean(auto, quiet bool, keep int, olderThan string) error {
 	if !quiet {
 		color.Green("✅")
 		fmt.Println()
-		
-		if keep == 0 && olderThan == "" {
-			color.Green("✨ All snapshots removed successfully!")
+
+		if keep == 0 && olderThan == "" && destroy {
+			color.Green("✨ Shadow repository completely removed!")
 			fmt.Println("   Run 'timemachine init' to reinitialize if needed.")
+		} else if keep == 0 && olderThan == "" {
+			color.Green("✨ All snapshots removed successfully!")
+			fmt.Println("   Time Machine is still initialized and ready for new snapshots.")
 		} else {
 			color.Green("✨ Cleanup completed successfully!")
 			fmt.Printf("   Removed %d snapshots, kept %d snapshots.\n", len(snapshotsToRemove), keepCount)
@@ -223,12 +240,12 @@ func filterByAge(snapshots []core.Snapshot, olderThan string) ([]core.Snapshot, 
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	// For now, use simple heuristic based on relative time
 	// In a real implementation, we'd parse the actual commit timestamps
 	var toRemove []core.Snapshot
 	var toKeep int
-	
+
 	for _, snapshot := range snapshots {
 		// Simple heuristic: if relative time suggests it's old, remove it
 		if isOlderThan(snapshot.Time, duration) {
@@ -237,7 +254,7 @@ func filterByAge(snapshots []core.Snapshot, olderThan string) ([]core.Snapshot, 
 			toKeep++
 		}
 	}
-	
+
 	return toRemove, toKeep, nil
 }
 
@@ -246,15 +263,15 @@ func parseDuration(s string) (int, error) {
 	if len(s) < 2 {
 		return 0, fmt.Errorf("duration too short")
 	}
-	
+
 	numStr := s[:len(s)-1]
 	unit := s[len(s)-1:]
-	
+
 	num, err := strconv.Atoi(numStr)
 	if err != nil {
 		return 0, fmt.Errorf("invalid number: %s", numStr)
 	}
-	
+
 	switch unit {
 	case "d":
 		return num, nil // days
@@ -286,14 +303,35 @@ func isOlderThan(timeStr string, days int) bool {
 func cleanupSelectiveSnapshots(gitManager *core.GitManager, toRemove []core.Snapshot, keepCount int) error {
 	// For now, implement simple approach - in production might use git rebase/filter-branch
 	// This is a placeholder for more sophisticated selective cleanup
-	
+
 	if keepCount == 0 {
 		// If keeping nothing, just remove the whole repository
 		return os.RemoveAll(gitManager.State.ShadowRepoDir)
 	}
-	
+
 	// For selective removal, we'd need more complex Git operations
 	// For MVP, we'll just warn that this is not yet implemented
 	return fmt.Errorf("selective snapshot cleanup not yet implemented - use --keep 0 for complete cleanup")
 }
 
+// cleanAndRecreateRepository removes all snapshots but preserves the shadow repository structure
+func cleanAndRecreateRepository(gitManager *core.GitManager) error {
+	// Remove the entire shadow repository directory
+	err := os.RemoveAll(gitManager.State.ShadowRepoDir)
+	if err != nil {
+		return fmt.Errorf("failed to remove shadow repository: %w", err)
+	}
+
+	// Setup shadow repository (without commits)
+	if err := gitManager.SetupShadowRepo(); err != nil {
+		return fmt.Errorf("failed to setup shadow repository: %w", err)
+	}
+
+	// Create initial snapshot with current files (like init command does)
+	err = gitManager.CreateSnapshot("Initial Time Machine snapshot after clean")
+	if err != nil {
+		return fmt.Errorf("failed to create initial snapshot: %w", err)
+	}
+
+	return nil
+}
