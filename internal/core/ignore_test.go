@@ -16,7 +16,7 @@ func TestEnhancedIgnoreManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create a test .timemachine-ignore file
 	ignoreContent := `# Test ignore patterns
@@ -178,7 +178,7 @@ func TestCachePerformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create ignore file with some patterns
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
@@ -227,7 +227,7 @@ func TestConcurrentAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create ignore file
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
@@ -292,7 +292,7 @@ func TestSecurityLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	t.Run("TooManyLines", func(t *testing.T) {
 		// Create ignore file with too many lines
@@ -354,7 +354,7 @@ func TestMemoryManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create ignore file
 	ignoreContent := "*.log\n"
@@ -391,7 +391,7 @@ func TestReloadIgnoreFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
 
@@ -437,7 +437,7 @@ func BenchmarkIgnoreCheck(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create realistic ignore file
 	ignoreContent := `# Node.js
@@ -517,7 +517,7 @@ func BenchmarkCachePerformance(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
@@ -556,7 +556,7 @@ func TestLegacyCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	ignoreContent := "*.log\nbuild/\n"
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
@@ -611,7 +611,7 @@ func TestDirectoryPatternMatching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create ignore file with directory path patterns (without trailing slash)
 	ignoreContent := `# Test directory path patterns
@@ -682,7 +682,7 @@ func TestPatternWithSlashesVsSimplePatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Test patterns with and without slashes
 	ignoreContent := `# Patterns with slashes (path-specific)
@@ -743,7 +743,7 @@ func TestRealWorldPatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Real-world patterns commonly found in .gitignore files
 	ignoreContent := `# Dependencies
@@ -840,7 +840,7 @@ func TestEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		defer func() { _ = os.RemoveAll(tempDir) }()
+		t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 		// No ignore file exists
 		manager := NewEnhancedIgnoreManager(tempDir)
@@ -860,7 +860,7 @@ func TestEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		defer func() { _ = os.RemoveAll(tempDir) }()
+		t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 		// Create empty ignore file
 		ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)

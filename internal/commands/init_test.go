@@ -18,7 +18,7 @@ func TestUpdateGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	t.Run("CreateNewGitignore", func(t *testing.T) {
 		err := updateGitignore(tempDir)
@@ -111,7 +111,7 @@ func TestInstallPostPushHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	gitDir := filepath.Join(tempDir, ".git")
 	err = os.MkdirAll(gitDir, 0755)
@@ -250,7 +250,7 @@ func TestGitHookExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	gitDir := filepath.Join(tempDir, ".git")
 	err = os.MkdirAll(gitDir, 0755)
@@ -441,7 +441,7 @@ func TestInitCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Initialize git repository
 	if _, err := exec.LookPath("git"); err != nil {
