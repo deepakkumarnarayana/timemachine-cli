@@ -8,7 +8,7 @@ import (
 
 func TestValidateLogConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		config      LogConfig
@@ -60,7 +60,7 @@ func TestValidateLogConfig(t *testing.T) {
 			expectError: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.validateLogConfig(&tt.config)
@@ -76,7 +76,7 @@ func TestValidateLogConfig(t *testing.T) {
 
 func TestValidateWatcherConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		config      WatcherConfig
@@ -158,7 +158,7 @@ func TestValidateWatcherConfig(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.validateWatcherConfig(&tt.config)
@@ -174,7 +174,7 @@ func TestValidateWatcherConfig(t *testing.T) {
 
 func TestValidateCacheConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		config      CacheConfig
@@ -245,7 +245,7 @@ func TestValidateCacheConfig(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.validateCacheConfig(&tt.config)
@@ -261,7 +261,7 @@ func TestValidateCacheConfig(t *testing.T) {
 
 func TestValidateGitConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		config      GitConfig
@@ -323,7 +323,7 @@ func TestValidateGitConfig(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.validateGitConfig(&tt.config)
@@ -339,7 +339,7 @@ func TestValidateGitConfig(t *testing.T) {
 
 func TestValidateUIConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		config      UIConfig
@@ -376,7 +376,7 @@ func TestValidateUIConfig(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.validateUIConfig(&tt.config)
@@ -392,7 +392,7 @@ func TestValidateUIConfig(t *testing.T) {
 
 func TestValidate_FullConfig(t *testing.T) {
 	validator := NewValidator()
-	
+
 	// Valid configuration
 	validConfig := &Config{
 		Log: LogConfig{
@@ -425,12 +425,12 @@ func TestValidate_FullConfig(t *testing.T) {
 			TableFormat:        "table",
 		},
 	}
-	
+
 	err := validator.Validate(validConfig)
 	if err != nil {
 		t.Errorf("Valid configuration failed validation: %v", err)
 	}
-	
+
 	// Invalid configuration (multiple errors)
 	invalidConfig := &Config{
 		Log: LogConfig{
@@ -445,8 +445,8 @@ func TestValidate_FullConfig(t *testing.T) {
 			EnableRecursive: true,
 		},
 		Cache: CacheConfig{
-			MaxEntries:  500, // Too small
-			MaxMemoryMB: 5,   // Too small
+			MaxEntries:  500,              // Too small
+			MaxMemoryMB: 5,                // Too small
 			TTL:         30 * time.Second, // Too small
 			EnableLRU:   true,
 		},
@@ -462,12 +462,12 @@ func TestValidate_FullConfig(t *testing.T) {
 			TableFormat:        "invalid", // Invalid
 		},
 	}
-	
+
 	err = validator.Validate(invalidConfig)
 	if err == nil {
 		t.Error("Invalid configuration should have failed validation")
 	}
-	
+
 	// Check that error message contains multiple validation errors
 	errorMessage := err.Error()
 	expectedErrors := []string{"log config", "watcher config", "cache config", "git config", "ui config"}
@@ -480,7 +480,7 @@ func TestValidate_FullConfig(t *testing.T) {
 
 func TestValidateUpdate(t *testing.T) {
 	validator := NewValidator()
-	
+
 	tests := []struct {
 		name        string
 		field       string
@@ -554,7 +554,7 @@ func TestValidateUpdate(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.ValidateUpdate(tt.field, tt.value)
@@ -571,11 +571,11 @@ func TestValidateUpdate(t *testing.T) {
 func TestGetValidationHelp(t *testing.T) {
 	validator := NewValidator()
 	help := validator.GetValidationHelp()
-	
+
 	if help == "" {
 		t.Error("GetValidationHelp() returned empty string")
 	}
-	
+
 	// Check that help contains expected sections
 	expectedSections := []string{
 		"Log Configuration:",
@@ -584,7 +584,7 @@ func TestGetValidationHelp(t *testing.T) {
 		"Git Configuration:",
 		"UI Configuration:",
 	}
-	
+
 	for _, section := range expectedSections {
 		if !strings.Contains(help, section) {
 			t.Errorf("Help text should contain '%s'", section)

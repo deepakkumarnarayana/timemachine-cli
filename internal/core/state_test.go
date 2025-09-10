@@ -8,11 +8,7 @@ import (
 
 func TestFindGitDir(t *testing.T) {
 	// Create a temporary directory structure for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Test case 1: Directory with .git
 	gitDir := filepath.Join(tempDir, ".git")
@@ -38,11 +34,7 @@ func TestFindGitDir(t *testing.T) {
 	}
 
 	// Test case 3: Directory without .git
-	noGitDir, err := os.MkdirTemp("", "no-git")
-	if err != nil {
-		t.Fatalf("Failed to create no-git temp dir: %v", err)
-	}
-	defer os.RemoveAll(noGitDir)
+	noGitDir := t.TempDir()
 
 	result = findGitDir(noGitDir)
 	if result != "" {
@@ -52,11 +44,13 @@ func TestFindGitDir(t *testing.T) {
 
 func TestNewAppState(t *testing.T) {
 	// Create a temporary directory structure with .git
-	tempDir, err := os.MkdirTemp("", "timemachine-appstate-test")
+	tempDir := t.TempDir()
+
+	// Resolve symbolic links for cross-platform compatibility (Mac OS /var -> /private/var)
+	tempDir, err := filepath.EvalSymlinks(tempDir)
 	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
+		t.Fatalf("Failed to resolve symbolic links in temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {
@@ -68,7 +62,7 @@ func TestNewAppState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get original working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
@@ -80,12 +74,22 @@ func TestNewAppState(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if state.ProjectRoot != tempDir {
-		t.Errorf("Expected ProjectRoot %s, got %s", tempDir, state.ProjectRoot)
+	// Resolve symbolic links in expected paths for comparison
+	expectedProjectRoot, err := filepath.EvalSymlinks(tempDir)
+	if err != nil {
+		expectedProjectRoot = tempDir
+	}
+	expectedGitDir, err := filepath.EvalSymlinks(gitDir)
+	if err != nil {
+		expectedGitDir = gitDir
 	}
 
-	if state.GitDir != gitDir {
-		t.Errorf("Expected GitDir %s, got %s", gitDir, state.GitDir)
+	if state.ProjectRoot != expectedProjectRoot {
+		t.Errorf("Expected ProjectRoot %s, got %s", expectedProjectRoot, state.ProjectRoot)
+	}
+
+	if state.GitDir != expectedGitDir {
+		t.Errorf("Expected GitDir %s, got %s", expectedGitDir, state.GitDir)
 	}
 
 	expectedShadowDir := filepath.Join(gitDir, "timemachine_snapshots")
@@ -121,18 +125,14 @@ func TestNewAppState(t *testing.T) {
 
 func TestNewAppStateNoGit(t *testing.T) {
 	// Create a temporary directory without .git
-	tempDir, err := os.MkdirTemp("", "timemachine-nogit-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Change to the temp directory
 	originalWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get original working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
@@ -157,11 +157,7 @@ func contains(s, substr string) bool {
 
 func TestFindGitDirNestedStructure(t *testing.T) {
 	// Create a complex nested structure to test directory traversal
-	tempDir, err := os.MkdirTemp("", "timemachine-nested-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create structure: tempDir/.git and tempDir/project/src/deep/nested/
 	gitDir := filepath.Join(tempDir, ".git")

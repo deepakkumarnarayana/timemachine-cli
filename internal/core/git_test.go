@@ -10,11 +10,7 @@ import (
 
 func TestGitManager_RunCommand(t *testing.T) {
 	// Create a temporary directory structure for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-git-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create main .git directory
 	gitDir := filepath.Join(tempDir, ".git")
@@ -49,7 +45,7 @@ func TestGitManager_RunCommand(t *testing.T) {
 	gitManager := NewGitManager(state)
 
 	// Test RunCommand before initialization (should fail)
-	_, err = gitManager.RunCommand("status")
+	_, err := gitManager.RunCommand("status")
 	if err == nil {
 		t.Error("Expected error for git command before initialization")
 	}
@@ -72,13 +68,9 @@ func TestGitManager_RunCommand(t *testing.T) {
 	}
 }
 
-func TestGitManager_InitializeShadowRepo(t *testing.T) {
+func TestGitManager_SetupShadowRepo(t *testing.T) {
 	// Create test environment
-	tempDir, err := os.MkdirTemp("", "timemachine-init-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {
@@ -110,10 +102,10 @@ func TestGitManager_InitializeShadowRepo(t *testing.T) {
 
 	gitManager := NewGitManager(state)
 
-	// Test initialization
-	err = gitManager.InitializeShadowRepo()
+	// Test setup (without commits)
+	err := gitManager.SetupShadowRepo()
 	if err != nil {
-		t.Fatalf("Failed to initialize shadow repo: %v", err)
+		t.Fatalf("Failed to setup shadow repo: %v", err)
 	}
 
 	// Verify shadow repo directory exists
@@ -143,12 +135,20 @@ func TestGitManager_InitializeShadowRepo(t *testing.T) {
 	if email != "test@example.com" {
 		t.Errorf("Expected user.email 'test@example.com', got '%s'", email)
 	}
+
+	// Verify no commits were created (this is the key difference from InitializeShadowRepo)
+	commits, err := gitManager.ListSnapshots(0, "")
+	if err != nil {
+		t.Errorf("Failed to list snapshots: %v", err)
+	}
+	if len(commits) != 0 {
+		t.Errorf("Expected no commits from SetupShadowRepo, got %d commits", len(commits))
+	}
 }
 
 func TestGitManager_CreateSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
 
 	// Create a test file
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -172,8 +172,15 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 		t.Errorf("Expected 1 snapshot, got %d", len(snapshots))
 	}
 
-	if snapshots[0].Message != "Test snapshot" {
-		t.Errorf("Expected message 'Test snapshot', got '%s'", snapshots[0].Message)
+	// Check that message includes branch context and our text
+	expectedContent := "Test snapshot"
+	if !strings.Contains(snapshots[0].Message, expectedContent) {
+		t.Errorf("Expected message to contain '%s', got '%s'", expectedContent, snapshots[0].Message)
+	}
+
+	// Verify branch-aware format [branch] message
+	if !strings.HasPrefix(snapshots[0].Message, "[") {
+		t.Errorf("Expected branch-aware message format [branch] message, got '%s'", snapshots[0].Message)
 	}
 
 	// Test creating snapshot with auto-generated message
@@ -204,27 +211,27 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 func TestGitManager_ListSnapshots(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
 
 	// Test empty repository
 	snapshots, err := gitManager.ListSnapshots(10, "")
 	if err != nil {
 		t.Fatalf("Failed to list snapshots from empty repo: %v", err)
 	}
+	// Shadow repo setup creates no commits, so expect 0
 	if len(snapshots) != 0 {
-		t.Errorf("Expected 0 snapshots from empty repo, got %d", len(snapshots))
+		t.Errorf("Expected 0 snapshots from empty shadow repo, got %d", len(snapshots))
 	}
 
 	// Create test files and snapshots
 	testFiles := []string{"file1.txt", "file2.txt", "dir/file3.txt"}
 	for i, fileName := range testFiles {
 		filePath := filepath.Join(tempDir, fileName)
-		
+
 		// Create directory if needed
 		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			t.Fatalf("Failed to create directory: %v", err)
 		}
-		
+
 		content := []byte("Content " + string(rune('A'+i)))
 		if err := os.WriteFile(filePath, content, 0644); err != nil {
 			t.Fatalf("Failed to create test file %s: %v", fileName, err)
@@ -240,8 +247,9 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list all snapshots: %v", err)
 	}
+	// Expect 3 total: just the 3 test snapshots (no initial empty commit)
 	if len(snapshots) != 3 {
-		t.Errorf("Expected 3 snapshots, got %d", len(snapshots))
+		t.Errorf("Expected 3 snapshots (test snapshots only), got %d", len(snapshots))
 	}
 
 	// Test limit
@@ -267,7 +275,6 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 func TestGitManager_RestoreSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
 
 	// Create initial file and snapshot
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -361,10 +368,7 @@ func TestGitManager_RestoreSnapshot(t *testing.T) {
 
 // Helper function to set up a test repository
 func setupTestRepo(t *testing.T) (string, *AppState, *GitManager) {
-	tempDir, err := os.MkdirTemp("", "timemachine-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {
@@ -396,9 +400,9 @@ func setupTestRepo(t *testing.T) (string, *AppState, *GitManager) {
 
 	gitManager := NewGitManager(state)
 
-	// Initialize shadow repo
-	if err := gitManager.InitializeShadowRepo(); err != nil {
-		t.Fatalf("Failed to initialize shadow repo: %v", err)
+	// Setup shadow repo (without commits)
+	if err := gitManager.SetupShadowRepo(); err != nil {
+		t.Fatalf("Failed to setup shadow repo: %v", err)
 	}
 
 	return tempDir, state, gitManager

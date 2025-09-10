@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // RestoreCmd creates the restore command
@@ -113,13 +113,13 @@ func runRestore(hash string, files []string, force bool) error {
 	if !force {
 		fmt.Println()
 		fmt.Print("Do you want to continue? (y/N): ")
-		
+
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read confirmation: %w", err)
 		}
-		
+
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
 			fmt.Println("Restore cancelled.")
@@ -130,22 +130,22 @@ func runRestore(hash string, files []string, force bool) error {
 	// Perform the restore
 	fmt.Println()
 	fmt.Print("🔄 Restoring files... ")
-	
+
 	err = gitManager.RestoreSnapshot(targetSnapshot.Hash, files)
 	if err != nil {
 		color.Red("❌")
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
-	
+
 	color.Green("✅")
 	fmt.Println()
-	
+
 	if len(files) == 0 {
 		color.Green("✨ All files restored successfully!")
 	} else {
 		color.Green("✨ Files restored successfully!")
 	}
-	
+
 	fmt.Println()
 	fmt.Println("📝 Reminder:")
 	fmt.Println("   • Changes are in your working directory only")

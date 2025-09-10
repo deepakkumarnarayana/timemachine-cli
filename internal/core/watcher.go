@@ -58,7 +58,7 @@ func (w *Watcher) Start() error {
 
 	// Create initial snapshot
 	fmt.Print("✅ Creating initial snapshot... ")
-	if err := w.gitManager.CreateSnapshot(""); err != nil {
+	if err := w.gitManager.CreateWatcherSnapshot(); err != nil {
 		color.Red("❌")
 		return fmt.Errorf("failed to create initial snapshot: %w", err)
 	}
@@ -79,7 +79,7 @@ func (w *Watcher) Start() error {
 func (w *Watcher) Stop() {
 	close(w.stopChan)
 	w.debouncer.Cancel()
-	w.fsWatcher.Close()
+	_ = w.fsWatcher.Close() // #nosec G104 - Intentionally ignoring Close error in cleanup
 	w.wg.Wait()
 }
 
@@ -110,17 +110,7 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 	})
 }
 
-// shouldIgnoreDirectory checks if a directory should be ignored (DEPRECATED - use IgnoreManager)
-func (w *Watcher) shouldIgnoreDirectory(path string) bool {
-	// Delegate to new IgnoreManager for backward compatibility
-	return w.ignoreManager.ShouldIgnoreDirectory(path)
-}
 
-// shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
-func (w *Watcher) shouldIgnoreFile(path string) bool {
-	// Delegate to new IgnoreManager for backward compatibility
-	return w.ignoreManager.ShouldIgnoreFile(path)
-}
 
 // eventLoop processes file system events
 func (w *Watcher) eventLoop() {
@@ -150,7 +140,7 @@ func (w *Watcher) eventLoop() {
 // handleEvent processes a single file system event
 func (w *Watcher) handleEvent(event fsnotify.Event) {
 	// Ignore if file should be ignored
-	if w.shouldIgnoreFile(event.Name) {
+	if w.ignoreManager.ShouldIgnoreFile(event.Name) {
 		return
 	}
 
@@ -172,12 +162,12 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 // createSnapshot creates a snapshot (called after debounce delay)
 func (w *Watcher) createSnapshot() {
 	fmt.Print("📸 Creating snapshot... ")
-	
-	if err := w.gitManager.CreateSnapshot(""); err != nil {
+
+	if err := w.gitManager.CreateWatcherSnapshot(); err != nil {
 		color.Red("❌ Error: %v", err)
 		return
 	}
-	
+
 	// Get latest snapshot for display
 	snapshots, err := w.gitManager.ListSnapshots(1, "")
 	if err == nil && len(snapshots) > 0 {

@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	
+
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/core"
 )
 
 // CalculateDirectorySize calculates the total size of all files in a directory
 func CalculateDirectorySize(dirPath string) (int64, error) {
 	var size int64
-	
+
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip files we can't access
@@ -21,7 +21,7 @@ func CalculateDirectorySize(dirPath string) (int64, error) {
 		}
 		return nil
 	})
-	
+
 	return size, err
 }
 
@@ -43,12 +43,12 @@ func FormatBytes(bytes int64) string {
 func CountProjectFiles(rootPath string) (fileCount, dirCount int) {
 	// Use Enhanced IgnoreManager for consistent ignore logic
 	ignoreManager := core.NewEnhancedIgnoreManager(rootPath)
-	
-	filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+
+	_ = filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error { // #nosec G104 - Intentionally ignoring Walk errors to continue file counting
 		if err != nil {
 			return nil
 		}
-		
+
 		// Use IgnoreManager to check if path should be ignored
 		if ignoreManager.ShouldIgnore(path) {
 			if info.IsDir() {
@@ -56,7 +56,7 @@ func CountProjectFiles(rootPath string) (fileCount, dirCount int) {
 			}
 			return nil
 		}
-		
+
 		if info.IsDir() {
 			dirCount++
 		} else {
@@ -64,6 +64,6 @@ func CountProjectFiles(rootPath string) (fileCount, dirCount int) {
 		}
 		return nil
 	})
-	
+
 	return fileCount, dirCount
 }

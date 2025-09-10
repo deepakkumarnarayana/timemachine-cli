@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	
+
 	"github.com/deepakkumarnarayana/timemachine-cli/internal/config"
 )
 
@@ -34,12 +34,15 @@ func NewAppState() (*AppState, error) {
 		return nil, errors.New("not in a Git repository (or any parent directory)")
 	}
 
-	// Set ProjectRoot to parent of .git
+	// Set ProjectRoot to parent of .git - resolve symlinks for cross-platform compatibility
 	projectRoot := filepath.Dir(gitDir)
-	
+	if resolved, err := filepath.EvalSymlinks(projectRoot); err == nil {
+		projectRoot = resolved
+	}
+
 	// Set ShadowRepoDir to .git/timemachine_snapshots
 	shadowRepoDir := filepath.Join(gitDir, "timemachine_snapshots")
-	
+
 	// Check if shadow repo exists by looking for HEAD file
 	headFile := filepath.Join(shadowRepoDir, "HEAD")
 	isInitialized := false
@@ -49,7 +52,7 @@ func NewAppState() (*AppState, error) {
 
 	// Initialize configuration manager
 	configManager := config.NewManager()
-	
+
 	// Load configuration (don't fail if config doesn't exist)
 	if err := configManager.Load(projectRoot); err != nil {
 		// Log warning but continue - config is optional
@@ -73,11 +76,11 @@ func NewAppStateWithConfig(configManager *config.Manager) (*AppState, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Override configuration
 	state.ConfigManager = configManager
 	state.Config = configManager.Get()
-	
+
 	return state, nil
 }
 
@@ -85,27 +88,27 @@ func NewAppStateWithConfig(configManager *config.Manager) (*AppState, error) {
 // and walking up the directory tree until it finds one or reaches the filesystem root
 func findGitDir(startDir string) string {
 	currentDir := startDir
-	
+
 	for {
 		// Check for .git directory in current directory
 		gitPath := filepath.Join(currentDir, ".git")
-		
+
 		// Check if .git exists and is a directory (not a file, which could be a submodule)
 		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
 			return gitPath
 		}
-		
+
 		// Move to parent directory
 		parentDir := filepath.Dir(currentDir)
-		
+
 		// Stop if we've reached the filesystem root
 		if parentDir == currentDir {
 			break
 		}
-		
+
 		currentDir = parentDir
 	}
-	
+
 	// Not found
 	return ""
 }
