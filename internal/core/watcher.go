@@ -111,11 +111,6 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 }
 
 
-// shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
-func (w *Watcher) shouldIgnoreFile(path string) bool {
-	// Delegate to new IgnoreManager for backward compatibility
-	return w.ignoreManager.ShouldIgnoreFile(path)
-}
 
 // eventLoop processes file system events
 func (w *Watcher) eventLoop() {
@@ -145,7 +140,7 @@ func (w *Watcher) eventLoop() {
 // handleEvent processes a single file system event
 func (w *Watcher) handleEvent(event fsnotify.Event) {
 	// Ignore if file should be ignored
-	if w.shouldIgnoreFile(event.Name) {
+	if w.ignoreManager.ShouldIgnoreFile(event.Name) {
 		return
 	}
 
