@@ -111,7 +111,7 @@ func updateGitignore(projectRoot string) error {
 
 	gitignorePath = filepath.Clean(gitignorePath)
 	if file, err := os.Open(gitignorePath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
 
 		for scanner.Scan() {

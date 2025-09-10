@@ -303,16 +303,16 @@ func BenchmarkEnvironmentVariableProcessing(b *testing.B) {
 	originalEnvs := make(map[string]string)
 	for key, value := range testEnvVars {
 		originalEnvs[key] = os.Getenv(key)
-		os.Setenv(key, value)
+		_ = os.Setenv(key, value)
 	}
 
 	// Clean up after benchmark
 	defer func() {
 		for key, originalValue := range originalEnvs {
 			if originalValue == "" {
-				os.Unsetenv(key)
+				_ = os.Unsetenv(key)
 			} else {
-				os.Setenv(key, originalValue)
+				_ = os.Setenv(key, originalValue)
 			}
 		}
 	}()
@@ -357,7 +357,7 @@ func BenchmarkValidationUpdate(b *testing.B) {
 	b.Run("IncrementalValidation", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			update := testUpdates[i%len(testUpdates)]
-			validator.ValidateUpdate(update.field, update.value)
+			_ = validator.ValidateUpdate(update.field, update.value)
 		}
 	})
 }

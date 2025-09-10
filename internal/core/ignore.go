@@ -77,7 +77,7 @@ func (eim *EnhancedIgnoreManager) loadIgnoreFile() error {
 	if err != nil {
 		return fmt.Errorf("failed to open ignore file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Security: Check file size before reading
 	if stat, err := file.Stat(); err == nil {

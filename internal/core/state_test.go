@@ -74,7 +74,7 @@ func TestNewAppState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get original working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
@@ -148,7 +148,7 @@ func TestNewAppStateNoGit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get original working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)

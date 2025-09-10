@@ -457,14 +457,14 @@ func TestInitCommand(t *testing.T) {
 	// Configure git
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 
 	// Change to temp directory for testing
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 	os.Chdir(tempDir)
 
 	t.Run("InitializesCorrectly", func(t *testing.T) {

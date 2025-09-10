@@ -88,7 +88,7 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 		defer func() {
 			for key, originalValue := range originalEnvs {
 				if originalValue == "" {
-					os.Unsetenv(key)
+					_ = os.Unsetenv(key)
 				} else {
 					os.Setenv(key, originalValue)
 				}
@@ -482,7 +482,7 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 		}
 
 		// Restore permissions for cleanup
-		defer os.Chmod(configPath, 0600)
+		defer func() { _ = os.Chmod(configPath, 0600) }()
 
 		manager := NewManager()
 		err = manager.Load(projectRoot)

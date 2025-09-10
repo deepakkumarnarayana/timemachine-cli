@@ -339,7 +339,7 @@ func (v *Validator) isValidFilePath(path string) bool {
 			// Check if it's entirely alphanumeric (potential base64)
 			isAlphaNumeric := true
 			for _, r := range originalPath {
-				if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+				if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 					isAlphaNumeric = false
 					break
 				}

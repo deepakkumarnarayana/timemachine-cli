@@ -423,7 +423,7 @@ func TestSecurityConcurrentAccess(t *testing.T) {
 					File:   fmt.Sprintf("/tmp/concurrent_%d.log", id),
 				},
 			}
-			validator.validateLogConfig(&config.Log)
+			_ = validator.validateLogConfig(&config.Log)
 		}(i)
 	}
 

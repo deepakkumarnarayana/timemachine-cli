@@ -370,12 +370,12 @@ func TestLongRunningSession(t *testing.T) {
 				if targetBranch != "main" {
 					// Create branch if it doesn't exist
 					cmd := exec.Command("git", "-C", tempDir, "checkout", "-b", targetBranch)
-					cmd.Run() // Ignore error if branch exists
+					_ = cmd.Run() // Ignore error if branch exists
 				} else {
 					cmd := exec.Command("git", "-C", tempDir, "checkout", "master")
 					if err := cmd.Run(); err != nil {
 						cmd = exec.Command("git", "-C", tempDir, "checkout", "main")
-						cmd.Run()
+						_ = cmd.Run()
 					}
 				}
 				t.Logf("Session: switched to branch %s", targetBranch)

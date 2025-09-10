@@ -33,7 +33,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := NewManager()
 
@@ -81,7 +81,7 @@ func TestLoad_WithConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create test config file
 	configContent := `
@@ -187,7 +187,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Set environment variables
 	originalEnvs := make(map[string]string)
@@ -204,14 +204,14 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	// Save original env values and set test values
 	for key, value := range envVars {
 		originalEnvs[key] = os.Getenv(key)
-		os.Setenv(key, value)
+		_ = os.Setenv(key, value)
 	}
 
 	// Restore original env values after test
 	defer func() {
 		for key, originalValue := range originalEnvs {
 			if originalValue == "" {
-				os.Unsetenv(key)
+				_ = os.Unsetenv(key)
 			} else {
 				os.Setenv(key, originalValue)
 			}
@@ -264,7 +264,7 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := NewManager()
 
@@ -321,7 +321,7 @@ func TestLoad_InvalidConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create invalid config file
 	invalidConfigContent := `

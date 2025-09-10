@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -210,22 +211,22 @@ func TestSanitizeGitPath(t *testing.T) {
 		{
 			name: "valid relative path",
 			path: ".git/timemachine_snapshots",
-			want: ".git/timemachine_snapshots",
+			want: filepath.FromSlash(".git/timemachine_snapshots"),
 		},
 		{
 			name: "valid nested path",
 			path: "tmp/project/.git/timemachine_snapshots",
-			want: "tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash("tmp/project/.git/timemachine_snapshots"),
 		},
 		{
 			name: "path with redundant separators",
 			path: "tmp//project//.git//timemachine_snapshots",
-			want: "tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash("tmp/project/.git/timemachine_snapshots"),
 		},
 		{
 			name: "path with dot components that resolve locally",
 			path: "tmp/./project/./.git/timemachine_snapshots",
-			want: "tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash("tmp/project/.git/timemachine_snapshots"),
 		},
 		{
 			name:      "parent directory traversal",

@@ -79,8 +79,7 @@ func (w *Watcher) Start() error {
 func (w *Watcher) Stop() {
 	close(w.stopChan)
 	w.debouncer.Cancel()
-	// #nosec G104 - Intentionally ignoring Close error in cleanup
-	w.fsWatcher.Close()
+	_ = w.fsWatcher.Close() // #nosec G104 - Intentionally ignoring Close error in cleanup
 	w.wg.Wait()
 }
 
@@ -111,11 +110,6 @@ func (w *Watcher) addDirectoryRecursive(root string) error {
 	})
 }
 
-// shouldIgnoreDirectory checks if a directory should be ignored (DEPRECATED - use IgnoreManager)
-func (w *Watcher) shouldIgnoreDirectory(path string) bool {
-	// Delegate to new IgnoreManager for backward compatibility
-	return w.ignoreManager.ShouldIgnoreDirectory(path)
-}
 
 // shouldIgnoreFile checks if a file should be ignored (DEPRECATED - use IgnoreManager)
 func (w *Watcher) shouldIgnoreFile(path string) bool {

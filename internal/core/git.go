@@ -175,10 +175,6 @@ func (g *GitManager) getLastCommitBranchAdvanced() BranchDetectionResult {
 	return result
 }
 
-// getLastCommitBranch extracts the branch name from the last commit message (backward compatibility)
-func (g *GitManager) getLastCommitBranch() string {
-	return g.getLastCommitBranchAdvanced().LastBranch
-}
 
 // countUncommittedFiles counts files that would be included in next commit
 func (g *GitManager) countUncommittedFiles() (int, error) {
@@ -340,8 +336,7 @@ func (g *GitManager) CreateWatcherSnapshot() error {
 				if lastBranch == "" && !isInitialCommit {
 					lastBranch = "unknown" // Handle corrupted data
 				}
-				// #nosec G104 - Metadata errors should not fail snapshot creation
-			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
+			_ = g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit) // #nosec G104 - Metadata errors should not fail snapshot creation
 			}
 		}
 	}
@@ -561,8 +556,7 @@ func (g *GitManager) CreateSnapshot(message string) error {
 			if lastBranch == "" && !isInitialCommit {
 				lastBranch = "unknown" // Handle corrupted data
 			}
-			// #nosec G104 - Metadata errors should not fail snapshot creation
-			g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit)
+		_ = g.addCommitMetadata(commitHash, currentBranch, lastBranch, changeCount, commitType, isBranchSwitch || isInitialCommit) // #nosec G104 - Metadata errors should not fail snapshot creation
 		}
 	}
 
