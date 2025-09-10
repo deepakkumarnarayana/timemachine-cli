@@ -149,7 +149,22 @@ sudo mv timemachine-linux-amd64 /usr/local/bin/timemachine
 ./timemachine-linux-amd64 init
 ```
 
-### 🎯 Option 3: Build It Yourself
+### 🎯 Option 3: Go Install (For Go Developers)
+
+**If you have Go installed (easiest for developers):**
+```bash
+go install github.com/deepakkumarnarayana/timemachine-cli/cmd/timemachine@latest
+```
+
+This method:
+- ✅ **Works on all platforms** (Linux, Mac, Windows)
+- ✅ **Always gets you the latest version** 
+- ✅ **Automatically puts binary in your PATH**
+- ✅ **No manual downloading or moving files needed**
+
+*Perfect for Go developers who want the simplest install!*
+
+### 🎯 Option 4: Build It Yourself
 
 *For developers who like to build from source:*
 ```bash
