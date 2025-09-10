@@ -15,6 +15,8 @@ jobs:
   test-matrix:
     name: Tests (${{ matrix.os }}, Go ${{ matrix.go-version }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +80,8 @@ jobs:
   coverage:
     name: Test Coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -132,6 +136,8 @@ jobs:
   branch-detection-tests:
     name: Branch Detection Feature Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -172,6 +178,8 @@ jobs:
   security-analysis:
     name: Security Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -220,6 +228,8 @@ jobs:
   benchmarks:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -256,6 +266,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -318,6 +330,8 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -361,6 +375,8 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [test-matrix, coverage, branch-detection-tests, security-analysis, integration-tests, code-quality]
     if: always()
     
