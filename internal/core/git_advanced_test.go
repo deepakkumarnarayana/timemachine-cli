@@ -13,7 +13,7 @@ import (
 // TestGetCurrentBranch tests branch detection in various scenarios
 func TestGetCurrentBranch(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test 1: Default branch (should be master or main)
 	branch, err := gitManager.GetCurrentBranch()
@@ -83,7 +83,7 @@ func TestGetCurrentBranch(t *testing.T) {
 // TestGetLastCommitBranchAdvanced tests the advanced branch detection logic
 func TestGetLastCommitBranchAdvanced(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test 1: No history scenario (initial state)
 	result := gitManager.getLastCommitBranchAdvanced()
@@ -143,7 +143,7 @@ func TestGetLastCommitBranchAdvanced(t *testing.T) {
 // TestCountUncommittedFiles tests file counting functionality
 func TestCountUncommittedFiles(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test 1: No uncommitted files
 	count, err := gitManager.countUncommittedFiles()
@@ -202,7 +202,7 @@ func TestCountUncommittedFiles(t *testing.T) {
 // TestAddCommitMetadata tests Git notes metadata functionality
 func TestAddCommitMetadata(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create a commit first
 	testFile := filepath.Join(tempDir, "metadata-test.txt")
@@ -261,7 +261,7 @@ func TestAddCommitMetadata(t *testing.T) {
 // TestGetSnapshotMetadata tests metadata retrieval
 func TestGetSnapshotMetadata(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create a snapshot
 	testFile := filepath.Join(tempDir, "metadata-retrieval-test.txt")
@@ -303,7 +303,7 @@ func TestGetSnapshotMetadata(t *testing.T) {
 // TestCreateWatcherSnapshot tests watcher-specific snapshot creation
 func TestCreateWatcherSnapshot(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test 1: No changes scenario
 	err := gitManager.CreateWatcherSnapshot()
@@ -343,7 +343,7 @@ func TestCreateWatcherSnapshot(t *testing.T) {
 // TestListSnapshotsByBranch tests branch-specific snapshot listing
 func TestListSnapshotsByBranch(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create snapshots on different branches
 	// Main branch snapshot
@@ -396,7 +396,7 @@ func TestListSnapshotsByBranch(t *testing.T) {
 // TestListBranchSwitches tests branch switch detection
 func TestListBranchSwitches(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create initial commit
 	testFile := filepath.Join(tempDir, "switch-test.txt")

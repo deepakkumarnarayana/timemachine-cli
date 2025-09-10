@@ -12,7 +12,7 @@ import (
 func TestBranchDetection(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create initial commit in main repo to establish a baseline
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -109,7 +109,7 @@ func TestBranchDetection(t *testing.T) {
 func TestBranchDetectionFallback(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test fallback logic when no previous commits exist
 	testFile := filepath.Join(tempDir, "fallback-test.txt")
@@ -143,7 +143,7 @@ func TestBranchDetectionFallback(t *testing.T) {
 func TestBranchDetectionCorruptedData(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create a snapshot first
 	testFile := filepath.Join(tempDir, "corrupted-test.txt")

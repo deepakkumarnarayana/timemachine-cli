@@ -33,7 +33,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	manager := NewManager()
 
@@ -81,7 +81,7 @@ func TestLoad_WithConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create test config file
 	configContent := `
@@ -187,7 +187,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Set environment variables
 	originalEnvs := make(map[string]string)
@@ -264,7 +264,7 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	manager := NewManager()
 
@@ -321,7 +321,7 @@ func TestLoad_InvalidConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create invalid config file
 	invalidConfigContent := `

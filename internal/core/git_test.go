@@ -14,7 +14,7 @@ func TestGitManager_RunCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create main .git directory
 	gitDir := filepath.Join(tempDir, ".git")
@@ -78,7 +78,7 @@ func TestGitManager_SetupShadowRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {
@@ -157,7 +157,7 @@ func TestGitManager_SetupShadowRepo(t *testing.T) {
 func TestGitManager_CreateSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create a test file
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -220,7 +220,7 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 func TestGitManager_ListSnapshots(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Test empty repository
 	snapshots, err := gitManager.ListSnapshots(10, "")
@@ -285,7 +285,7 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 func TestGitManager_RestoreSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
 	// Create initial file and snapshot
 	testFile := filepath.Join(tempDir, "test.txt")
