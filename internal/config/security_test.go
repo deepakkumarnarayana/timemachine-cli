@@ -110,7 +110,7 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			t.Cleanup(func() { os.RemoveAll(tempDir) })
+			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 			err = manager.Load(tempDir)
 			if err != nil {
@@ -133,7 +133,7 @@ func TestSecurityFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	manager := NewManager()
 	err = manager.CreateDefaultConfigFile(tempDir)
@@ -205,7 +205,7 @@ log:
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			t.Cleanup(func() { os.RemoveAll(tempDir) })
+			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 			configPath := filepath.Join(tempDir, "timemachine.yaml")
 			err = os.WriteFile(configPath, []byte(test.content), 0600)
@@ -235,7 +235,7 @@ func TestSecurityLargeConfigFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create a very large config file (but not so large it breaks the test system)
 	largeContent := "log:\n  level: info\n"
