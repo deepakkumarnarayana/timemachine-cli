@@ -12,7 +12,7 @@ import (
 // TestMessageFormatValidation tests all documented message formats
 func TestMessageFormatValidation(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	testFile := filepath.Join(tempDir, "format-test.txt")
 
@@ -85,7 +85,7 @@ func TestMessageFormatValidation(t *testing.T) {
 // TestLargeFileCountHandling tests handling of large change sets
 func TestLargeFileCountHandling(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create many files to trigger large change warning
 	const fileCount = 30 // More than the 20 file threshold
@@ -126,7 +126,7 @@ func TestLargeFileCountHandling(t *testing.T) {
 // TestCorruptedNotesHandling tests resilience to corrupted Git notes
 func TestCorruptedNotesHandling(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create initial snapshot
 	testFile := filepath.Join(tempDir, "corrupt-notes-test.txt")
@@ -183,7 +183,7 @@ func TestCorruptedNotesHandling(t *testing.T) {
 // TestEmptyRepositoryScenarios tests behavior with empty repositories
 func TestEmptyRepositoryScenarios(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Test operations on empty repo
 	result := gitManager.getLastCommitBranchAdvanced()
@@ -215,7 +215,7 @@ func TestEmptyRepositoryScenarios(t *testing.T) {
 // TestBranchSwitchChain tests multiple consecutive branch switches
 func TestBranchSwitchChain(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	testFile := filepath.Join(tempDir, "chain-test.txt")
 	branches := []string{"feature-1", "feature-2", "bugfix", "hotfix"}
@@ -277,7 +277,7 @@ func TestBranchSwitchChain(t *testing.T) {
 // TestConcurrentOperations tests thread safety
 func TestConcurrentOperations(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create base file
 	testFile := filepath.Join(tempDir, "concurrent-test.txt")
@@ -338,7 +338,7 @@ func TestConcurrentOperations(t *testing.T) {
 // TestRestoreEdgeCases tests restoration with edge cases
 func TestRestoreEdgeCases(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Test 1: Restore from invalid hash
 	err := gitManager.RestoreSnapshot("invalid-hash-1234567890", []string{})
