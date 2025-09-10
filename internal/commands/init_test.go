@@ -14,11 +14,7 @@ import (
 
 func TestUpdateGitignore(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-gitignore-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	t.Run("CreateNewGitignore", func(t *testing.T) {
 		err := updateGitignore(tempDir)
@@ -107,14 +103,10 @@ func TestUpdateGitignore(t *testing.T) {
 
 func TestInstallPostPushHook(t *testing.T) {
 	// Create temporary git directory structure
-	tempDir, err := os.MkdirTemp("", "timemachine-hook-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
-	err = os.MkdirAll(gitDir, 0755)
+	err := os.MkdirAll(gitDir, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create .git dir: %v", err)
 	}
@@ -246,14 +238,10 @@ func TestGitHookExecution(t *testing.T) {
 	}
 
 	// Create temporary repository
-	tempDir, err := os.MkdirTemp("", "timemachine-hook-exec-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
-	err = os.MkdirAll(gitDir, 0755)
+	err := os.MkdirAll(gitDir, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create .git dir: %v", err)
 	}
@@ -437,11 +425,7 @@ fi
 
 func TestInitCommand(t *testing.T) {
 	// Create temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-init-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Initialize git repository
 	if _, err := exec.LookPath("git"); err != nil {

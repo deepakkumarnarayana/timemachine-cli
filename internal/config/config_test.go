@@ -29,16 +29,12 @@ func TestNewManager(t *testing.T) {
 
 func TestLoad_WithDefaults(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	manager := NewManager()
 
 	// Load configuration without any config file (should use defaults)
-	err = manager.Load(tempDir)
+	err := manager.Load(tempDir)
 	if err != nil {
 		t.Errorf("Load() failed: %v", err)
 	}
@@ -77,11 +73,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 
 func TestLoad_WithConfigFile(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create test config file
 	configContent := `
@@ -116,7 +108,7 @@ ui:
 `
 
 	configPath := filepath.Join(tempDir, "timemachine.yaml")
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
 	}
@@ -183,11 +175,7 @@ ui:
 
 func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Set environment variables
 	originalEnvs := make(map[string]string)
@@ -221,7 +209,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	manager := NewManager()
 
 	// Load configuration
-	err = manager.Load(tempDir)
+	err := manager.Load(tempDir)
 	if err != nil {
 		t.Errorf("Load() failed: %v", err)
 	}
@@ -260,16 +248,12 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 
 func TestCreateDefaultConfigFile(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	manager := NewManager()
 
 	// Create default config file
-	err = manager.CreateDefaultConfigFile(tempDir)
+	err := manager.CreateDefaultConfigFile(tempDir)
 	if err != nil {
 		t.Errorf("CreateDefaultConfigFile() failed: %v", err)
 	}
@@ -317,11 +301,7 @@ func contains(s, substr string) bool {
 
 func TestLoad_InvalidConfigFile(t *testing.T) {
 	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "timemachine-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create invalid config file
 	invalidConfigContent := `
@@ -339,7 +319,7 @@ cache:
 `
 
 	configPath := filepath.Join(tempDir, "timemachine.yaml")
-	err = os.WriteFile(configPath, []byte(invalidConfigContent), 0644)
+	err := os.WriteFile(configPath, []byte(invalidConfigContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
 	}

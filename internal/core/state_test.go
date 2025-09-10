@@ -8,11 +8,7 @@ import (
 
 func TestFindGitDir(t *testing.T) {
 	// Create a temporary directory structure for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Test case 1: Directory with .git
 	gitDir := filepath.Join(tempDir, ".git")
@@ -38,11 +34,7 @@ func TestFindGitDir(t *testing.T) {
 	}
 
 	// Test case 3: Directory without .git
-	noGitDir, err := os.MkdirTemp("", "no-git")
-	if err != nil {
-		t.Fatalf("Failed to create no-git temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(noGitDir) })
+	noGitDir := t.TempDir()
 
 	result = findGitDir(noGitDir)
 	if result != "" {
@@ -52,14 +44,10 @@ func TestFindGitDir(t *testing.T) {
 
 func TestNewAppState(t *testing.T) {
 	// Create a temporary directory structure with .git
-	tempDir, err := os.MkdirTemp("", "timemachine-appstate-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Resolve symbolic links for cross-platform compatibility (Mac OS /var -> /private/var)
-	tempDir, err = filepath.EvalSymlinks(tempDir)
+	tempDir, err := filepath.EvalSymlinks(tempDir)
 	if err != nil {
 		t.Fatalf("Failed to resolve symbolic links in temp dir: %v", err)
 	}
@@ -137,11 +125,7 @@ func TestNewAppState(t *testing.T) {
 
 func TestNewAppStateNoGit(t *testing.T) {
 	// Create a temporary directory without .git
-	tempDir, err := os.MkdirTemp("", "timemachine-nogit-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Change to the temp directory
 	originalWd, err := os.Getwd()
@@ -173,11 +157,7 @@ func contains(s, substr string) bool {
 
 func TestFindGitDirNestedStructure(t *testing.T) {
 	// Create a complex nested structure to test directory traversal
-	tempDir, err := os.MkdirTemp("", "timemachine-nested-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create structure: tempDir/.git and tempDir/project/src/deep/nested/
 	gitDir := filepath.Join(tempDir, ".git")

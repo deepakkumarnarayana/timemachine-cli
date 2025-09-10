@@ -13,7 +13,6 @@ import (
 // TestCompleteAIWorkflow tests the complete workflow as used in AI development
 func TestCompleteAIWorkflow(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Simulate AI development workflow:
 	// 1. Start with working code
@@ -158,7 +157,6 @@ module.exports = { calculateTotal, validateInput };
 // TestBranchWorkflow tests branch creation and switching workflow
 func TestBranchWorkflow(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create base project structure
 	srcDir := filepath.Join(tempDir, "src")
@@ -351,7 +349,6 @@ func add(a, b int) int {
 // TestLongRunningSession simulates a long development session
 func TestLongRunningSession(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Simulate a long session with many small changes
 	const sessionSnapshots = 15
@@ -448,7 +445,6 @@ func TestLongRunningSession(t *testing.T) {
 // TestErrorRecoveryWorkflow tests recovery from various error conditions
 func TestErrorRecoveryWorkflow(t *testing.T) {
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Test 1: Recovery from file permission issues
 	restrictedFile := filepath.Join(tempDir, "restricted.txt")

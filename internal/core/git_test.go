@@ -10,11 +10,7 @@ import (
 
 func TestGitManager_RunCommand(t *testing.T) {
 	// Create a temporary directory structure for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-git-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create main .git directory
 	gitDir := filepath.Join(tempDir, ".git")
@@ -49,7 +45,7 @@ func TestGitManager_RunCommand(t *testing.T) {
 	gitManager := NewGitManager(state)
 
 	// Test RunCommand before initialization (should fail)
-	_, err = gitManager.RunCommand("status")
+	_, err := gitManager.RunCommand("status")
 	if err == nil {
 		t.Error("Expected error for git command before initialization")
 	}
@@ -74,11 +70,7 @@ func TestGitManager_RunCommand(t *testing.T) {
 
 func TestGitManager_SetupShadowRepo(t *testing.T) {
 	// Create test environment
-	tempDir, err := os.MkdirTemp("", "timemachine-setup-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {
@@ -111,7 +103,7 @@ func TestGitManager_SetupShadowRepo(t *testing.T) {
 	gitManager := NewGitManager(state)
 
 	// Test setup (without commits)
-	err = gitManager.SetupShadowRepo()
+	err := gitManager.SetupShadowRepo()
 	if err != nil {
 		t.Fatalf("Failed to setup shadow repo: %v", err)
 	}
@@ -157,7 +149,6 @@ func TestGitManager_SetupShadowRepo(t *testing.T) {
 func TestGitManager_CreateSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create a test file
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -220,7 +211,6 @@ func TestGitManager_CreateSnapshot(t *testing.T) {
 func TestGitManager_ListSnapshots(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Test empty repository
 	snapshots, err := gitManager.ListSnapshots(10, "")
@@ -285,7 +275,6 @@ func TestGitManager_ListSnapshots(t *testing.T) {
 func TestGitManager_RestoreSnapshot(t *testing.T) {
 	// Create test environment
 	tempDir, _, gitManager := setupTestRepo(t)
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
 	// Create initial file and snapshot
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -379,10 +368,7 @@ func TestGitManager_RestoreSnapshot(t *testing.T) {
 
 // Helper function to set up a test repository
 func setupTestRepo(t *testing.T) (string, *AppState, *GitManager) {
-	tempDir, err := os.MkdirTemp("", "timemachine-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	tempDir := t.TempDir()
 
 	gitDir := filepath.Join(tempDir, ".git")
 	if err := os.Mkdir(gitDir, 0755); err != nil {

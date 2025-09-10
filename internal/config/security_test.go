@@ -106,13 +106,9 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 
 			// Create manager and load config
 			manager := NewManager()
-			tempDir, err := os.MkdirTemp("", "security-test")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+			tempDir := t.TempDir()
 
-			err = manager.Load(tempDir)
+			err := manager.Load(tempDir)
 			if err != nil {
 				t.Fatalf("Load failed: %v", err)
 			}
@@ -129,14 +125,10 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 
 // TestSecurityFilePermissions verifies secure file permissions
 func TestSecurityFilePermissions(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "security-perm-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	manager := NewManager()
-	err = manager.CreateDefaultConfigFile(tempDir)
+	err := manager.CreateDefaultConfigFile(tempDir)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
 	}
@@ -201,14 +193,10 @@ log:
 
 	for _, test := range maliciousConfigs {
 		t.Run(test.name, func(t *testing.T) {
-			tempDir, err := os.MkdirTemp("", "malicious-config-test")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+			tempDir := t.TempDir()
 
 			configPath := filepath.Join(tempDir, "timemachine.yaml")
-			err = os.WriteFile(configPath, []byte(test.content), 0600)
+			err := os.WriteFile(configPath, []byte(test.content), 0600)
 			if err != nil {
 				t.Fatalf("Failed to write malicious config: %v", err)
 			}
@@ -231,11 +219,7 @@ log:
 
 // TestSecurityLargeConfigFiles tests DoS via large config files
 func TestSecurityLargeConfigFiles(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "large-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create a very large config file (but not so large it breaks the test system)
 	largeContent := "log:\n  level: info\n"
@@ -243,7 +227,7 @@ func TestSecurityLargeConfigFiles(t *testing.T) {
 	largeContent += "watcher:\n  debounce_delay: 2s"
 
 	configPath := filepath.Join(tempDir, "timemachine.yaml")
-	err = os.WriteFile(configPath, []byte(largeContent), 0600)
+	err := os.WriteFile(configPath, []byte(largeContent), 0600)
 	if err != nil {
 		t.Fatalf("Failed to write large config: %v", err)
 	}

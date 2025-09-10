@@ -12,11 +12,7 @@ import (
 // TestEnhancedIgnoreManager tests the basic functionality
 func TestEnhancedIgnoreManager(t *testing.T) {
 	// Create temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "timemachine-ignore-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create a test .timemachine-ignore file
 	ignoreContent := `# Test ignore patterns
@@ -174,11 +170,7 @@ func TestPatternParsing(t *testing.T) {
 
 // TestCachePerformance tests the caching mechanism
 func TestCachePerformance(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-cache-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create ignore file with some patterns
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
@@ -223,11 +215,7 @@ func TestCachePerformance(t *testing.T) {
 
 // TestConcurrentAccess tests thread safety
 func TestConcurrentAccess(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-concurrent-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create ignore file
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
@@ -288,11 +276,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 // TestSecurityLimits tests security limits and error handling
 func TestSecurityLimits(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-security-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	t.Run("TooManyLines", func(t *testing.T) {
 		// Create ignore file with too many lines
@@ -350,11 +334,7 @@ invalid pattern with 	tab
 
 // TestMemoryManagement tests cache memory management
 func TestMemoryManagement(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-memory-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create ignore file
 	ignoreContent := "*.log\n"
@@ -387,11 +367,7 @@ func TestMemoryManagement(t *testing.T) {
 
 // TestReloadIgnoreFile tests dynamic reloading of ignore file
 func TestReloadIgnoreFile(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-reload-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
 
@@ -433,11 +409,7 @@ func TestReloadIgnoreFile(t *testing.T) {
 
 // BenchmarkIgnoreCheck benchmarks the ignore checking performance
 func BenchmarkIgnoreCheck(b *testing.B) {
-	tempDir, err := os.MkdirTemp("", "timemachine-bench")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	b.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := b.TempDir()
 
 	// Create realistic ignore file
 	ignoreContent := `# Node.js
@@ -513,11 +485,7 @@ coverage/
 
 // BenchmarkCachePerformance benchmarks cache hit vs miss performance
 func BenchmarkCachePerformance(b *testing.B) {
-	tempDir, err := os.MkdirTemp("", "timemachine-cache-bench")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	b.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := b.TempDir()
 
 	ignoreContent := "*.log\n*.tmp\nbuild/\n"
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
@@ -552,11 +520,7 @@ func BenchmarkCachePerformance(b *testing.B) {
 
 // TestLegacyCompatibility tests backward compatibility methods
 func TestLegacyCompatibility(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-legacy-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	ignoreContent := "*.log\nbuild/\n"
 	ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
@@ -607,11 +571,7 @@ func TestLegacyCompatibility(t *testing.T) {
 
 // TestDirectoryPatternMatching tests patterns like "dir/subdir" that should match files within those paths
 func TestDirectoryPatternMatching(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-dirpattern-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Create ignore file with directory path patterns (without trailing slash)
 	ignoreContent := `# Test directory path patterns
@@ -678,11 +638,7 @@ build/dist`
 
 // TestPatternWithSlashesVsSimplePatterns tests the difference between patterns with and without slashes
 func TestPatternWithSlashesVsSimplePatterns(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-slash-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Test patterns with and without slashes
 	ignoreContent := `# Patterns with slashes (path-specific)
@@ -739,11 +695,7 @@ secret.key`
 
 // TestRealWorldPatterns tests common real-world patterns like those found in .gitignore files
 func TestRealWorldPatterns(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "timemachine-realworld-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir := t.TempDir()
 
 	// Real-world patterns commonly found in .gitignore files
 	ignoreContent := `# Dependencies
@@ -836,11 +788,7 @@ config/local.yml`
 // Test for edge cases and error conditions
 func TestEdgeCases(t *testing.T) {
 	t.Run("NonExistentIgnoreFile", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "timemachine-edge-test")
-		if err != nil {
-			t.Fatalf("Failed to create temp dir: %v", err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+		tempDir := t.TempDir()
 
 		// No ignore file exists
 		manager := NewEnhancedIgnoreManager(tempDir)
@@ -856,11 +804,7 @@ func TestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("EmptyIgnoreFile", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "timemachine-empty-test")
-		if err != nil {
-			t.Fatalf("Failed to create temp dir: %v", err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+		tempDir := t.TempDir()
 
 		// Create empty ignore file
 		ignoreFile := filepath.Join(tempDir, DefaultIgnoreFile)
