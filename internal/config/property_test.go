@@ -591,7 +591,7 @@ func writeFile(path, content string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = file.Close() }()
+	defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
 
 	_, err = file.WriteString(content)
 	return err

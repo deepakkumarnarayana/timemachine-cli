@@ -101,8 +101,8 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 	for _, test := range maliciousEnvVars {
 		t.Run(test.name, func(t *testing.T) {
 			// Set the malicious environment variable
-			os.Setenv(test.envVar, "malicious_value")
-			defer os.Unsetenv(test.envVar)
+			_ = os.Setenv(test.envVar, "malicious_value")
+			defer func() { _ = os.Unsetenv(test.envVar) }()
 
 			// Create manager and load config
 			manager := NewManager()
@@ -110,7 +110,7 @@ func TestSecurityEnvironmentVariableWhitelist(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			err = manager.Load(tempDir)
 			if err != nil {
@@ -205,7 +205,7 @@ log:
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			configPath := filepath.Join(tempDir, "timemachine.yaml")
 			err = os.WriteFile(configPath, []byte(test.content), 0600)

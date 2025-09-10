@@ -213,7 +213,7 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 			if originalValue == "" {
 				_ = os.Unsetenv(key)
 			} else {
-				os.Setenv(key, originalValue)
+				_ = os.Setenv(key, originalValue)
 			}
 		}
 	}()

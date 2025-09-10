@@ -465,7 +465,7 @@ func TestInitCommand(t *testing.T) {
 	// Change to temp directory for testing
 	originalDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(originalDir) }()
-	os.Chdir(tempDir)
+	_ = os.Chdir(tempDir)
 
 	t.Run("InitializesCorrectly", func(t *testing.T) {
 		// Create init command

@@ -81,7 +81,7 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 		// Save and set env vars
 		for key, value := range testEnvs {
 			originalEnvs[key] = os.Getenv(key)
-			os.Setenv(key, value)
+			_ = os.Setenv(key, value)
 		}
 
 		// Restore env vars after test
@@ -90,7 +90,7 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 				if originalValue == "" {
 					_ = os.Unsetenv(key)
 				} else {
-					os.Setenv(key, originalValue)
+					_ = os.Setenv(key, originalValue)
 				}
 			}
 		}()
