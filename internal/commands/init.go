@@ -111,7 +111,7 @@ func updateGitignore(projectRoot string) error {
 
 	gitignorePath = filepath.Clean(gitignorePath)
 	if file, err := os.Open(gitignorePath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
-		defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
 
 		for scanner.Scan() {
@@ -148,7 +148,7 @@ func updateGitignore(projectRoot string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
-	defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+	defer func() { _ = file.Close() }()
 
 	writer := bufio.NewWriter(file)
 
@@ -223,7 +223,7 @@ func createDefaultTimemachineIgnore(projectRoot string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create .timemachine-ignore: %w", err)
 	}
-	defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+	defer func() { _ = file.Close() }()
 
 	writer := bufio.NewWriter(file)
 	for _, line := range defaultPatterns {
@@ -269,7 +269,7 @@ func installUnixHook(hooksDir string) error {
 	var timemachineFound bool
 
 	if file, err := os.Open(hookPath); err == nil { // #nosec G304 - Path is cleaned to prevent path traversal
-		defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+		defer func() { _ = file.Close() }()
 		scanner := bufio.NewScanner(file)
 
 		for scanner.Scan() {
@@ -308,7 +308,7 @@ func installUnixHook(hooksDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create hook file: %w", err)
 	}
-	defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+	defer func() { _ = file.Close() }()
 
 	writer := bufio.NewWriter(file)
 

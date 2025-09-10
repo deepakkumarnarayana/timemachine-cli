@@ -77,7 +77,7 @@ func (eim *EnhancedIgnoreManager) loadIgnoreFile() error {
 	if err != nil {
 		return fmt.Errorf("failed to open ignore file: %w", err)
 	}
-	defer file.Close() // #nosec G104 - Close errors in defer are rarely actionable
+	defer func() { _ = file.Close() }()
 
 	// Security: Check file size before reading
 	if stat, err := file.Stat(); err == nil {

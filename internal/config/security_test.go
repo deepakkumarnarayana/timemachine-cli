@@ -133,7 +133,7 @@ func TestSecurityFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := NewManager()
 	err = manager.CreateDefaultConfigFile(tempDir)
@@ -235,7 +235,7 @@ func TestSecurityLargeConfigFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create a very large config file (but not so large it breaks the test system)
 	largeContent := "log:\n  level: info\n"
@@ -276,7 +276,7 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 	originalHome := os.Getenv("HOME")
 
 	defer func() {
-		os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", originalHome)
 	}()
 
 	tests := []struct {
@@ -320,7 +320,7 @@ func TestSecurityAbsolutePathValidation(t *testing.T) {
 			name: "safe_home_path",
 			path: "/home/user/.config/app.log",
 			setupFunc: func() {
-				os.Setenv("HOME", "/home/user")
+				_ = os.Setenv("HOME", "/home/user")
 			},
 			expected: true,
 			desc:     "safe user home directory",
