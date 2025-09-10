@@ -26,6 +26,8 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +66,8 @@ jobs:
   coverage-tests:
     name: Coverage Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -113,6 +117,8 @@ jobs:
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -168,6 +174,8 @@ jobs:
   performance-tests:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -216,6 +224,8 @@ jobs:
   stress-tests:
     name: Stress Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -256,6 +266,8 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Set up Go
@@ -322,6 +334,8 @@ jobs:
   flaky-test-detection:
     name: Flaky Test Detection
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'schedule' || contains(github.event.pull_request.labels.*.name, 'flaky-test-check')
     
     steps:
