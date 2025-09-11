@@ -202,7 +202,7 @@ func TestConcurrentGitOperations(t *testing.T) {
 		// Launch 3 timemachine processes simultaneously
 		commands := [][]string{
 			{"list"},
-			{"list", "--limit", "1"},
+			{"status"}, 
 			{"list", "--limit", "5"},
 		}
 
@@ -386,7 +386,7 @@ func TestConcurrencyPerformance(t *testing.T) {
 	errors := make(chan error, 10)
 
 	// Launch multiple concurrent operations
-	operations := []string{"list", "show", "list"}
+	operations := []string{"list", "status", "list"}
 	
 	for i := 0; i < 10; i++ {
 		wg.Add(1)

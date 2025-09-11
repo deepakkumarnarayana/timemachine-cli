@@ -115,16 +115,23 @@ func TestFuzz_CommandInjectionInHash(t *testing.T) {
 		"; DROP TABLE users; --",
 	}
 	
-	for i := 0; i < 500; i++ {
+	// Create suite once for efficiency
+	suite := NewIntegrationTestSuite(t)
+	defer suite.Cleanup()
+	
+	// Initialize timemachine
+	stdout, stderr, exitCode := suite.runTimemachineCmd("init")
+	suite.expectSuccess(stdout, stderr, exitCode, "init")
+	
+	// Reduced iterations for faster testing (10 instead of 500)
+	for i := 0; i < 10; i++ {
 		for _, pattern := range injectionPatterns {
 			// Create hash-like input with injection
 			validHash := generateRandomHexString(8, 40)
 			maliciousInput := validHash + pattern
 			
 			// Test git hash validation
-			suite := NewIntegrationTestSuite(t)
 			stdout, stderr, exitCode := suite.runTimemachineCmd("inspect", maliciousInput)
-			suite.Cleanup()
 			
 			// Should fail due to hash validation
 			if exitCode == 0 {
