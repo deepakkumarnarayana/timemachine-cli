@@ -87,8 +87,8 @@ func TestValidateGitHash(t *testing.T) {
 	}
 }
 
-// TestSanitizeFilePath tests the file path sanitization function
-func TestSanitizeFilePath(t *testing.T) {
+// TestValidateUserFileFilter tests the file path validation function for user input
+func TestValidateUserFileFilter(t *testing.T) {
 	testCases := []struct {
 		name      string
 		path      string
@@ -156,10 +156,10 @@ func TestSanitizeFilePath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := sanitizeFilePath(tc.path)
+			got, err := validateUserFileFilter(tc.path)
 			if tc.wantErr {
 				if err == nil {
-					t.Errorf("sanitizeFilePath(%q) expected error, got nil", tc.path)
+					t.Errorf("validateUserFileFilter(%q) expected error, got nil", tc.path)
 				} else if len(tc.errMsgAny) > 0 {
 					// Check if error message contains any of the expected messages
 					errStr := err.Error()
@@ -171,24 +171,24 @@ func TestSanitizeFilePath(t *testing.T) {
 						}
 					}
 					if !foundMatch {
-						t.Errorf("sanitizeFilePath(%q) error = %v, want error containing one of %v",
+						t.Errorf("validateUserFileFilter(%q) error = %v, want error containing one of %v",
 							tc.path, err, tc.errMsgAny)
 					}
 				}
 			} else {
 				if err != nil {
-					t.Errorf("sanitizeFilePath(%q) unexpected error: %v", tc.path, err)
+					t.Errorf("validateUserFileFilter(%q) unexpected error: %v", tc.path, err)
 				}
 				if got != tc.want {
-					t.Errorf("sanitizeFilePath(%q) = %q, want %q", tc.path, got, tc.want)
+					t.Errorf("validateUserFileFilter(%q) = %q, want %q", tc.path, got, tc.want)
 				}
 			}
 		})
 	}
 }
 
-// TestSanitizeGitPath tests the git directory path sanitization function  
-func TestSanitizeGitPath(t *testing.T) {
+// TestValidateSystemGitDir tests the system git directory path validation function  
+func TestValidateSystemGitDir(t *testing.T) {
 	// Base test cases that work on all platforms
 	testCases := []struct {
 		name      string
@@ -247,10 +247,9 @@ func TestSanitizeGitPath(t *testing.T) {
 			errMsgAny: []string{"path must be local and relative"},
 		},
 		{
-			name:      "unix absolute path",
-			path:      "/tmp/project/.git",
-			wantErr:   true,
-			errMsgAny: []string{"path must be local and relative"},
+			name: "unix absolute path (allowed for system directories)",
+			path: "/tmp/project/.git",
+			want: "/tmp/project/.git",
 		},
 		{
 			name:      "complex attack path",
@@ -319,10 +318,10 @@ func TestSanitizeGitPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := sanitizeGitPath(tc.path)
+			got, err := validateSystemGitDir(tc.path)
 			if tc.wantErr {
 				if err == nil {
-					t.Errorf("sanitizeGitPath(%q) expected error, got nil", tc.path)
+					t.Errorf("validateSystemGitDir(%q) expected error, got nil", tc.path)
 				} else if len(tc.errMsgAny) > 0 {
 					// Check if error message contains any of the expected messages
 					errStr := err.Error()
@@ -334,16 +333,16 @@ func TestSanitizeGitPath(t *testing.T) {
 						}
 					}
 					if !foundMatch {
-						t.Errorf("sanitizeGitPath(%q) error = %v, want error containing one of %v",
+						t.Errorf("validateSystemGitDir(%q) error = %v, want error containing one of %v",
 							tc.path, err, tc.errMsgAny)
 					}
 				}
 			} else {
 				if err != nil {
-					t.Errorf("sanitizeGitPath(%q) unexpected error: %v", tc.path, err)
+					t.Errorf("validateSystemGitDir(%q) unexpected error: %v", tc.path, err)
 				}
 				if got != tc.want {
-					t.Errorf("sanitizeGitPath(%q) = %q, want %q", tc.path, got, tc.want)
+					t.Errorf("validateSystemGitDir(%q) = %q, want %q", tc.path, got, tc.want)
 				}
 			}
 		})
@@ -387,8 +386,8 @@ func TestSecurityValidation(t *testing.T) {
 	}
 
 	for _, path := range badPaths {
-		if _, err := sanitizeFilePath(path); err == nil {
-			t.Errorf("sanitizeFilePath should reject malicious input: %q", path)
+		if _, err := validateUserFileFilter(path); err == nil {
+			t.Errorf("validateUserFileFilter should reject malicious input: %q", path)
 		}
 	}
 
@@ -398,7 +397,6 @@ func TestSecurityValidation(t *testing.T) {
 		"",                                 // Empty path
 		"..",                               // Parent directory
 		"../etc/passwd",                    // Path traversal
-		"/tmp/.git/timemachine_snapshots",  // Unix absolute path
 		"../../.git/timemachine_snapshots", // Multiple path traversal
 		"tmp/../../../.ssh/id_rsa",         // Complex traversal through valid directory
 	}
@@ -418,8 +416,8 @@ func TestSecurityValidation(t *testing.T) {
 	}
 
 	for _, path := range badGitPaths {
-		if _, err := sanitizeGitPath(path); err == nil {
-			t.Errorf("sanitizeGitPath should reject malicious input: %q", path)
+		if _, err := validateSystemGitDir(path); err == nil {
+			t.Errorf("validateSystemGitDir should reject malicious input: %q", path)
 		}
 	}
 }

@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths for user inputs using strict validation
-func sanitizeGitPath(path string) (string, error) {
-	return security.SanitizeUserInputPath(path)
+// validateSystemGitDir validates system git directory paths (shadow repo, project root, etc.)
+func validateSystemGitDir(path string) (string, error) {
+	return security.ValidateSystemPath(path)
 }
 
 // validateGitHash ensures git hash is safe for use in commands
@@ -35,8 +35,8 @@ func validateGitHash(hash string) error {
 	return nil
 }
 
-// sanitizeFilePath prevents path traversal attacks using defense-in-depth security approach
-func sanitizeFilePath(path string) (string, error) {
+// validateUserFileFilter validates file filter paths from user input using defense-in-depth security approach
+func validateUserFileFilter(path string) (string, error) {
 	if path == "" {
 		return "", nil // Empty path is allowed for no filter
 	}
@@ -123,7 +123,7 @@ Examples:
 
 func runInspect(args []string, showDiff, showStats bool, fileFilter string, verbose, searchAll bool) error {
 	// Validate and sanitize file filter input
-	sanitizedFileFilter, err := sanitizeFilePath(fileFilter)
+	sanitizedFileFilter, err := validateUserFileFilter(fileFilter)
 	if err != nil {
 		return fmt.Errorf("invalid file filter: %w", err)
 	}
@@ -224,7 +224,7 @@ func showRepositoryStats(state *core.AppState) error {
 	color.Cyan("========================")
 
 	// Validate and sanitize shadow repo directory path
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
@@ -267,11 +267,11 @@ func showSnapshotOverview(state *core.AppState, hash string) error {
 	}
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -304,11 +304,11 @@ func showFileChanges(state *core.AppState, hash string, fileFilter string) error
 	}
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -397,11 +397,11 @@ func showDeletedFiles(state *core.AppState, hash string, fileFilter string) erro
 	}
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -494,11 +494,11 @@ func showDetailedDiff(state *core.AppState, hash string, fileFilter string) erro
 	}
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -578,11 +578,11 @@ func showComprehensiveAnalysis(state *core.AppState, hash string) error {
 	}
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -636,7 +636,7 @@ func isValidHash(state *core.AppState, hash string) bool {
 	}
 
 	// Validate and sanitize directory path
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return false
 	}
@@ -661,7 +661,7 @@ func formatBytes(bytes int64) string {
 
 func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, verbose bool) error {
 	// File filter is already validated in runInspect, but validate again for defense in depth
-	if _, err := sanitizeFilePath(fileFilter); err != nil {
+	if _, err := validateUserFileFilter(fileFilter); err != nil {
 		return fmt.Errorf("invalid file filter in search-all: %w", err)
 	}
 	color.Green("🔍 Searching All Snapshots")
@@ -673,11 +673,11 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 	fmt.Println()
 
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -752,11 +752,11 @@ func runSearchAllSnapshots(state *core.AppState, fileFilter string, showDiff, ve
 
 func showFileOperationsHistory(state *core.AppState, filename string) error {
 	// Validate and sanitize directory paths
-	sanitizedShadowRepo, err := sanitizeGitPath(state.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(state.ShadowRepoDir)
 	if err != nil {
 		return fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
-	sanitizedProjectRoot, err := sanitizeGitPath(state.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(state.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("invalid project root directory: %w", err)
 	}

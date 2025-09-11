@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// SanitizeGitPath validates and sanitizes git directory paths using Go's built-in security functions
-// This function supports both absolute paths (for internal system use) and relative paths (for user inputs)
-func SanitizeGitPath(path string) (string, error) {
+// ValidateSystemPath validates system directory paths (shadow repo, project root, git dirs)
+// This function allows absolute paths which are required for system operations
+func ValidateSystemPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
@@ -35,9 +35,9 @@ func SanitizeGitPath(path string) (string, error) {
 	return cleaned, nil
 }
 
-// SanitizeUserInputPath validates and sanitizes paths from user inputs with strict relative-only validation
+// ValidateUserInputPath validates paths from user inputs with strict relative-only validation
 // This function only allows relative paths for maximum security when handling user inputs
-func SanitizeUserInputPath(path string) (string, error) {
+func ValidateUserInputPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}

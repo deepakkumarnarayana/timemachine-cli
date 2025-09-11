@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestSanitizeGitPath tests the general path sanitization function that handles both absolute and relative paths
-func TestSanitizeGitPath(t *testing.T) {
+// TestValidateSystemPath tests the system path validation function that handles both absolute and relative paths
+func TestValidateSystemPath(t *testing.T) {
 	testCases := []struct {
 		name      string
 		path      string
@@ -57,10 +57,10 @@ func TestSanitizeGitPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := SanitizeGitPath(tc.path)
+			got, err := ValidateSystemPath(tc.path)
 			if tc.wantErr {
 				if err == nil {
-					t.Errorf("SanitizeGitPath(%q) expected error, got nil", tc.path)
+					t.Errorf("ValidateSystemPath(%q) expected error, got nil", tc.path)
 				} else if len(tc.errMsgAny) > 0 {
 					// Check if error message contains any of the expected messages
 					errStr := err.Error()
@@ -72,24 +72,24 @@ func TestSanitizeGitPath(t *testing.T) {
 						}
 					}
 					if !foundMatch {
-						t.Errorf("SanitizeGitPath(%q) error = %v, want error containing one of %v",
+						t.Errorf("ValidateSystemPath(%q) error = %v, want error containing one of %v",
 							tc.path, err, tc.errMsgAny)
 					}
 				}
 			} else {
 				if err != nil {
-					t.Errorf("SanitizeGitPath(%q) unexpected error: %v", tc.path, err)
+					t.Errorf("ValidateSystemPath(%q) unexpected error: %v", tc.path, err)
 				}
 				if got != tc.want {
-					t.Errorf("SanitizeGitPath(%q) = %q, want %q", tc.path, got, tc.want)
+					t.Errorf("ValidateSystemPath(%q) = %q, want %q", tc.path, got, tc.want)
 				}
 			}
 		})
 	}
 }
 
-// TestSanitizeUserInputPath tests the strict user input validation function  
-func TestSanitizeUserInputPath(t *testing.T) {
+// TestValidateUserInputPath tests the strict user input validation function  
+func TestValidateUserInputPath(t *testing.T) {
 	// Base test cases that work on all platforms
 	testCases := []struct {
 		name      string
@@ -186,10 +186,10 @@ func TestSanitizeUserInputPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := SanitizeUserInputPath(tc.path)
+			got, err := ValidateUserInputPath(tc.path)
 			if tc.wantErr {
 				if err == nil {
-					t.Errorf("SanitizeUserInputPath(%q) expected error, got nil", tc.path)
+					t.Errorf("ValidateUserInputPath(%q) expected error, got nil", tc.path)
 				} else if len(tc.errMsgAny) > 0 {
 					// Check if error message contains any of the expected messages
 					errStr := err.Error()
@@ -201,16 +201,16 @@ func TestSanitizeUserInputPath(t *testing.T) {
 						}
 					}
 					if !foundMatch {
-						t.Errorf("SanitizeUserInputPath(%q) error = %v, want error containing one of %v",
+						t.Errorf("ValidateUserInputPath(%q) error = %v, want error containing one of %v",
 							tc.path, err, tc.errMsgAny)
 					}
 				}
 			} else {
 				if err != nil {
-					t.Errorf("SanitizeUserInputPath(%q) unexpected error: %v", tc.path, err)
+					t.Errorf("ValidateUserInputPath(%q) unexpected error: %v", tc.path, err)
 				}
 				if got != tc.want {
-					t.Errorf("SanitizeUserInputPath(%q) = %q, want %q", tc.path, got, tc.want)
+					t.Errorf("ValidateUserInputPath(%q) = %q, want %q", tc.path, got, tc.want)
 				}
 			}
 		})

@@ -25,9 +25,9 @@ var (
 	gitHashPattern = regexp.MustCompile(`^[a-fA-F0-9]{4,40}$`)
 )
 
-// sanitizeGitPath validates and sanitizes git directory paths using the shared utility function
-func sanitizeGitPath(path string) (string, error) {
-	return security.SanitizeGitPath(path)
+// validateSystemGitDir validates system git directory paths using the shared utility function
+func validateSystemGitDir(path string) (string, error) {
+	return security.ValidateSystemPath(path)
 }
 
 // validateGitHash ensures git hash is safe for use in commands
@@ -52,13 +52,13 @@ func NewGitManager(state *AppState) *GitManager {
 // happen in shadow repo, not main repo
 func (g *GitManager) RunCommand(args ...string) (string, error) {
 	// Validate and sanitize shadow repo directory path
-	sanitizedShadowRepo, err := sanitizeGitPath(g.State.ShadowRepoDir)
+	sanitizedShadowRepo, err := validateSystemGitDir(g.State.ShadowRepoDir)
 	if err != nil {
 		return "", fmt.Errorf("invalid shadow repo directory: %w", err)
 	}
 
 	// Validate and sanitize project root path
-	sanitizedProjectRoot, err := sanitizeGitPath(g.State.ProjectRoot)
+	sanitizedProjectRoot, err := validateSystemGitDir(g.State.ProjectRoot)
 	if err != nil {
 		return "", fmt.Errorf("invalid project root directory: %w", err)
 	}
@@ -86,7 +86,7 @@ func (g *GitManager) RunCommand(args ...string) (string, error) {
 // GetCurrentBranch returns the currently active branch in the main repository
 func (g *GitManager) GetCurrentBranch() (string, error) {
 	// Validate and sanitize git directory path
-	sanitizedGitDir, err := sanitizeGitPath(g.State.GitDir)
+	sanitizedGitDir, err := validateSystemGitDir(g.State.GitDir)
 	if err != nil {
 		return "", fmt.Errorf("invalid git directory: %w", err)
 	}
@@ -402,7 +402,7 @@ func (g *GitManager) SetupShadowRepo() error {
 // CopyGitConfig copies user.name and user.email from the main repo to shadow repo
 func (g *GitManager) CopyGitConfig() error {
 	// Validate and sanitize git directory path
-	sanitizedGitDir, err := sanitizeGitPath(g.State.GitDir)
+	sanitizedGitDir, err := validateSystemGitDir(g.State.GitDir)
 	if err != nil {
 		return fmt.Errorf("invalid git directory: %w", err)
 	}
