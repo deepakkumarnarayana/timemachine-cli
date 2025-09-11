@@ -17,10 +17,10 @@ func ValidateSystemPath(path string) (string, error) {
 	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
 
-	// Always check for Windows-specific security issues (even on non-Windows platforms)
-	// This ensures consistent security validation across all platforms
-	if err := validateWindowsSystemPath(cleaned); err != nil {
-		return "", fmt.Errorf("windows system path security violation: %w", err)
+	// For system paths, only check for basic Windows reserved device names
+	// Allow Windows drive letters for legitimate system operations
+	if err := validateWindowsReservedDeviceNames(cleaned); err != nil {
+		return "", fmt.Errorf("windows reserved device name violation: %w", err)
 	}
 
 	// For absolute paths (system-internal paths like ShadowRepoDir), check basic security constraints
@@ -234,7 +234,8 @@ func validatePathBoundaries(cleanedPath string) error {
 	return nil
 }
 
-// validateWindowsSystemPath performs Windows-specific security validation for system paths
+// validateWindowsSystemPath performs Windows-specific security validation for user input paths
+// This function blocks Windows drive letters, UNC paths, and reserved device names
 func validateWindowsSystemPath(cleanedPath string) error {
 	// Check for Windows drive letter patterns (C:, D:, etc.)
 	if len(cleanedPath) >= 2 && cleanedPath[1] == ':' {
@@ -246,6 +247,12 @@ func validateWindowsSystemPath(cleanedPath string) error {
 		return fmt.Errorf("windows UNC paths not allowed for security")
 	}
 	
+	return validateWindowsReservedDeviceNames(cleanedPath)
+}
+
+// validateWindowsReservedDeviceNames checks for Windows reserved device names only
+// This is used for both system and user paths since device names are never allowed
+func validateWindowsReservedDeviceNames(cleanedPath string) error {
 	// Check for Windows reserved device names
 	baseName := filepath.Base(cleanedPath)
 	// Remove extension for checking device names
