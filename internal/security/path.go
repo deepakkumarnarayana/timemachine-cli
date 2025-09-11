@@ -210,7 +210,7 @@ func validatePathBoundaries(cleanedPath string) error {
 
 	// Check for Windows drive letter patterns
 	if len(cleanedPath) >= 2 && cleanedPath[1] == ':' {
-		return fmt.Errorf("Windows drive letter not allowed: %s", cleanedPath)
+		return fmt.Errorf("windows drive letter not allowed: %s", cleanedPath)
 	}
 
 	// Validate reasonable path depth (prevent deeply nested attacks)

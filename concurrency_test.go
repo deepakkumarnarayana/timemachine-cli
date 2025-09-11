@@ -363,7 +363,7 @@ func TestGitLockFileBehavior(t *testing.T) {
 		}
 
 		// Clean up our test lock file
-		os.Remove(lockFile)
+		_ = os.Remove(lockFile) // Ignore error - cleanup is best effort
 	})
 }
 

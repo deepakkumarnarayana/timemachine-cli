@@ -170,7 +170,7 @@ func TestDeveloperWorkflow_LargeProjectHandling(t *testing.T) {
 	dirs := []string{"src", "tests", "docs", "config"}
 	for _, dir := range dirs {
 		dirPath := filepath.Join(suite.repoDir, dir)
-		os.MkdirAll(dirPath, 0755)
+		_ = os.MkdirAll(dirPath, 0755) // Ignore error - will be caught by file operations
 		
 		// Create files in each directory
 		suite.createFile(filepath.Join(dir, "file1.go"), "package main")
@@ -301,7 +301,7 @@ func TestDeveloperWorkflow_CrossPlatformPaths(t *testing.T) {
 	
 	// Create nested directory structure
 	nestedDir := filepath.Join(suite.repoDir, "deeply", "nested", "directory")
-	os.MkdirAll(nestedDir, 0755)
+	_ = os.MkdirAll(nestedDir, 0755) // Ignore error - will be caught by file operations
 	suite.createFile(filepath.Join("deeply", "nested", "directory", "deep-file.go"), "package main")
 	
 	// When: Developer commits and creates snapshot

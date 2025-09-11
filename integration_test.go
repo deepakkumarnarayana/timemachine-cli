@@ -17,8 +17,8 @@ type IntegrationTestSuite struct {
 	tempDir        string
 	repoDir        string
 	binaryPath     string
-	initialSnapshots []string
-	cleanup        func()
+	// initialSnapshots []string // Unused field - removed for linting
+	// cleanup        func() // Unused field - removed for linting
 }
 
 // NewIntegrationTestSuite creates a new test suite with a temporary Git repository
@@ -37,7 +37,7 @@ func NewIntegrationTestSuite(t *testing.T) *IntegrationTestSuite {
 	// Build timemachine binary for testing
 	binaryPath := filepath.Join(tempDir, "timemachine")
 	if err := buildTimemachineBinary(binaryPath); err != nil {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir) // Ignore error - cleanup is best effort
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
@@ -46,9 +46,7 @@ func NewIntegrationTestSuite(t *testing.T) *IntegrationTestSuite {
 		tempDir:    tempDir,
 		repoDir:    repoDir,
 		binaryPath: binaryPath,
-		cleanup: func() {
-			os.RemoveAll(tempDir)
-		},
+		// cleanup removed - handled by Cleanup() method
 	}
 
 	// Initialize Git repository
@@ -59,9 +57,7 @@ func NewIntegrationTestSuite(t *testing.T) *IntegrationTestSuite {
 
 // Cleanup removes temporary files
 func (suite *IntegrationTestSuite) Cleanup() {
-	if suite.cleanup != nil {
-		suite.cleanup()
-	}
+	_ = os.RemoveAll(suite.tempDir) // Ignore error - cleanup is best effort
 }
 
 // buildTimemachineBinary compiles the timemachine binary for testing
@@ -74,8 +70,10 @@ func buildTimemachineBinary(outputPath string) error {
 func (suite *IntegrationTestSuite) initializeGitRepo() {
 	// Change to repo directory
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(suite.repoDir)
+	defer func() {
+		_ = os.Chdir(originalDir) // Ignore error on cleanup
+	}()
+	_ = os.Chdir(suite.repoDir) // Ignore error - will be caught by git command failures
 
 	// Initialize Git repo
 	suite.runGitCmd("init")
@@ -306,8 +304,9 @@ func TestListCommand(t *testing.T) {
 		// Count number of hash lines (should be only 1)
 		lines := strings.Split(stdout, "\n")
 		hashCount := 0
+		hashRegex := regexp.MustCompile(`^[a-fA-F0-9]{8}`) // Compile once for better performance
 		for _, line := range lines {
-			if matched, _ := regexp.MatchString(`^[a-fA-F0-9]{8}`, strings.TrimSpace(line)); matched {
+			if hashRegex.MatchString(strings.TrimSpace(line)) {
 				hashCount++
 			}
 		}
