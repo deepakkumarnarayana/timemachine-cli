@@ -25,6 +25,10 @@ release:
 test:
 	go test -v ./...
 
+# Run tests with race detection (Phase 1 concurrency testing)
+test-race:
+	go test -race -timeout=10m -v ./...
+
 # Run tests with coverage
 test-coverage:
 	go test -v -coverprofile=coverage.out ./...
