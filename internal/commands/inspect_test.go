@@ -259,62 +259,60 @@ func TestValidateSystemGitDir(t *testing.T) {
 		},
 	}
 
-	// Add Windows-specific test cases when running on Windows  
-	// Note: filepath.IsLocal is platform-aware and only validates for the current OS
-	// On Linux, Windows paths like "C:\temp" are treated as valid relative filenames
-	if runtime.GOOS == "windows" {
-		windowsTests := []struct {
-			name      string
-			path      string
-			want      string
-			wantErr   bool
-			errMsgAny []string
-		}{
-			{
-				name:      "windows absolute path with backslash",
-				path:      "C:\\temp\\project\\.git",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows absolute path with forward slash",
-				path:      "C:/temp/project/.git",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows UNC path",
-				path:      "\\\\server\\share\\.git",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows reserved device name",
-				path:      "NUL",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows reserved device name lowercase",
-				path:      "nul",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows COM port",
-				path:      "com1",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-			{
-				name:      "windows LPT port",
-				path:      "lpt1",
-				wantErr:   true,
-				errMsgAny: []string{"path must be local and relative"},
-			},
-		}
-		testCases = append(testCases, windowsTests...)
+	// Add Windows-specific test cases that run on all platforms for consistent security validation
+	// Our validateWindowsSystemPath() function now checks Windows paths regardless of platform
+	// This ensures consistent security validation across all operating systems
+	windowsTests := []struct {
+		name      string
+		path      string
+		want      string
+		wantErr   bool
+		errMsgAny []string
+	}{
+		{
+			name:      "windows absolute path with backslash",
+			path:      "C:\\temp\\project\\.git",
+			wantErr:   true,
+			errMsgAny: []string{"windows drive letter paths not allowed for security", "windows system path security violation"},
+		},
+		{
+			name:      "windows absolute path with forward slash",
+			path:      "C:/temp/project/.git",
+			wantErr:   true,
+			errMsgAny: []string{"windows drive letter paths not allowed for security", "windows system path security violation"},
+		},
+		{
+			name:      "windows UNC path",
+			path:      "\\\\server\\share\\.git",
+			wantErr:   true,
+			errMsgAny: []string{"windows UNC paths not allowed for security", "windows system path security violation"},
+		},
+		{
+			name:      "windows reserved device name",
+			path:      "NUL",
+			wantErr:   true,
+			errMsgAny: []string{"windows reserved device name not allowed", "windows system path security violation"},
+		},
+		{
+			name:      "windows reserved device name lowercase",
+			path:      "nul",
+			wantErr:   true,
+			errMsgAny: []string{"windows reserved device name not allowed", "windows system path security violation"},
+		},
+		{
+			name:      "windows COM port",
+			path:      "com1",
+			wantErr:   true,
+			errMsgAny: []string{"windows reserved device name not allowed", "windows system path security violation"},
+		},
+		{
+			name:      "windows LPT port",
+			path:      "lpt1",
+			wantErr:   true,
+			errMsgAny: []string{"windows reserved device name not allowed", "windows system path security violation"},
+		},
 	}
+	testCases = append(testCases, windowsTests...)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

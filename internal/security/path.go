@@ -17,6 +17,12 @@ func ValidateSystemPath(path string) (string, error) {
 	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
 
+	// Always check for Windows-specific security issues (even on non-Windows platforms)
+	// This ensures consistent security validation across all platforms
+	if err := validateWindowsSystemPath(cleaned); err != nil {
+		return "", fmt.Errorf("windows system path security violation: %w", err)
+	}
+
 	// For absolute paths (system-internal paths like ShadowRepoDir), check basic security constraints
 	if filepath.IsAbs(cleaned) {
 		// Prevent path traversal in absolute paths by checking the original path before cleaning
@@ -24,6 +30,7 @@ func ValidateSystemPath(path string) (string, error) {
 		if strings.Contains(path, "..") {
 			return "", fmt.Errorf("path traversal not allowed in absolute path")
 		}
+		
 		return cleaned, nil
 	}
 
@@ -224,5 +231,40 @@ func validatePathBoundaries(cleanedPath string) error {
 		return fmt.Errorf("path length exceeds maximum allowed: %d characters", len(cleanedPath))
 	}
 
+	return nil
+}
+
+// validateWindowsSystemPath performs Windows-specific security validation for system paths
+func validateWindowsSystemPath(cleanedPath string) error {
+	// Check for Windows drive letter patterns (C:, D:, etc.)
+	if len(cleanedPath) >= 2 && cleanedPath[1] == ':' {
+		return fmt.Errorf("windows drive letter paths not allowed for security")
+	}
+	
+	// Check for UNC paths (\\server\share)
+	if strings.HasPrefix(cleanedPath, `\\`) {
+		return fmt.Errorf("windows UNC paths not allowed for security")
+	}
+	
+	// Check for Windows reserved device names
+	baseName := filepath.Base(cleanedPath)
+	// Remove extension for checking device names
+	if dotIndex := strings.LastIndex(baseName, "."); dotIndex > 0 {
+		baseName = baseName[:dotIndex]
+	}
+	
+	reservedNames := []string{
+		"CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+	}
+	
+	upperBaseName := strings.ToUpper(baseName)
+	for _, reserved := range reservedNames {
+		if upperBaseName == reserved {
+			return fmt.Errorf("windows reserved device name not allowed: %s", baseName)
+		}
+	}
+	
 	return nil
 }
