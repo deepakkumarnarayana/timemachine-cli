@@ -68,7 +68,12 @@ func ValidateUserInputPath(path string) (string, error) {
 		return "", fmt.Errorf("path must be local and relative")
 	}
 
-	// Layer 4: Additional boundary validation for defense-in-depth
+	// Layer 4: Windows-specific security validation (cross-platform)
+	if err := validateWindowsSystemPath(cleaned); err != nil {
+		return "", fmt.Errorf("windows security violation: %w", err)
+	}
+
+	// Layer 5: Additional boundary validation for defense-in-depth
 	if err := validatePathBoundaries(cleaned); err != nil {
 		return "", fmt.Errorf("path boundary violation: %w", err)
 	}

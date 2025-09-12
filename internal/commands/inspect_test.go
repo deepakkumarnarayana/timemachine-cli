@@ -247,16 +247,41 @@ func TestValidateSystemGitDir(t *testing.T) {
 			errMsgAny: []string{"path must be local and relative"},
 		},
 		{
-			name: "unix absolute path (allowed for system directories)",
-			path: "/tmp/project/.git",
-			want: "/tmp/project/.git",
-		},
-		{
 			name:      "complex attack path",
 			path:      "tmp/project/../../../.ssh/id_rsa",
 			wantErr:   true,
 			errMsgAny: []string{"path must be local and relative"},
 		},
+	}
+
+	// Add Unix absolute path test - behavior differs by platform
+	if runtime.GOOS != "windows" {
+		// On Unix systems, absolute paths are allowed for system operations
+		testCases = append(testCases, struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			name: "unix absolute path (allowed for system directories)",
+			path: "/tmp/project/.git",
+			want: "/tmp/project/.git",
+		})
+	} else {
+		// On Windows, Unix-style absolute paths are rejected
+		testCases = append(testCases, struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			name:      "unix absolute path (rejected on windows)",
+			path:      "/tmp/project/.git",
+			wantErr:   true,
+			errMsgAny: []string{"path must be local and relative"},
+		})
 	}
 
 	// Add Windows-specific test cases that run on all platforms for consistent security validation
@@ -279,7 +304,7 @@ func TestValidateSystemGitDir(t *testing.T) {
 			name:      "windows absolute path with forward slash",
 			path:      "C:/temp/project/.git",
 			wantErr:   false,
-			want:      "C:/temp/project/.git",
+			want:      filepath.FromSlash("C:/temp/project/.git"),
 		},
 		{
 			name:      "windows UNC path",
@@ -389,31 +414,21 @@ func TestSecurityValidation(t *testing.T) {
 		}
 	}
 
-	// Test git path validation with known bad inputs
-	// Platform-agnostic attacks that should be blocked on all systems
-	badGitPaths := []string{
+	// Test system git path validation with actual malicious inputs
+	// These should be blocked even for system operations
+	badSystemGitPaths := []string{
 		"",                                 // Empty path
-		"..",                               // Parent directory
+		"..",                               // Parent directory traversal
 		"../etc/passwd",                    // Path traversal
 		"../../.git/timemachine_snapshots", // Multiple path traversal
 		"tmp/../../../.ssh/id_rsa",         // Complex traversal through valid directory
+		"NUL",                             // Windows reserved device name (blocked on all platforms)
+		"nul",                             // Windows reserved device name lowercase
+		"com1",                            // Windows COM port
+		"lpt1",                            // Windows LPT port
 	}
 
-	// Add platform-specific attacks
-	if runtime.GOOS == "windows" {
-		windowsBadPaths := []string{
-			"C:\\temp\\.git\\timemachine_snapshots", // Windows absolute path with backslash
-			"C:/temp/.git/timemachine_snapshots",    // Windows absolute path with forward slash
-			"\\\\server\\share\\.git",               // UNC path
-			"NUL",                                   // Windows reserved device name
-			"nul",                                   // Windows reserved device name (lowercase)
-			"com1",                                  // Windows COM port
-			"lpt1",                                  // Windows LPT port
-		}
-		badGitPaths = append(badGitPaths, windowsBadPaths...)
-	}
-
-	for _, path := range badGitPaths {
+	for _, path := range badSystemGitPaths {
 		if _, err := validateSystemGitDir(path); err == nil {
 			t.Errorf("validateSystemGitDir should reject malicious input: %q", path)
 		}
