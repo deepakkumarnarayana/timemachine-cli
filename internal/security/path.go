@@ -68,9 +68,11 @@ func ValidateUserInputPath(path string) (string, error) {
 		return "", fmt.Errorf("path must be local and relative")
 	}
 
-	// Layer 4: Windows-specific security validation (cross-platform)
-	if err := validateWindowsSystemPath(cleaned); err != nil {
-		return "", fmt.Errorf("windows security violation: %w", err)
+	// Layer 4: Windows-specific security validation (only for Windows-like paths)
+	if isWindowsLikePath(cleaned) {
+		if err := validateWindowsSystemPath(cleaned); err != nil {
+			return "", fmt.Errorf("windows security violation: %w", err)
+		}
 	}
 
 	// Layer 5: Additional boundary validation for defense-in-depth
@@ -279,4 +281,38 @@ func validateWindowsReservedDeviceNames(cleanedPath string) error {
 	}
 	
 	return nil
+}
+
+// isWindowsLikePath determines if a path looks like a Windows path
+func isWindowsLikePath(path string) bool {
+	// Check for Windows drive letter patterns (C:, D:, etc.)
+	if len(path) >= 2 && path[1] == ':' {
+		return true
+	}
+	
+	// Check for UNC paths (\\server\share)
+	if strings.HasPrefix(path, `\\`) {
+		return true
+	}
+	
+	// Check for Windows reserved device names (always validate these cross-platform)
+	baseName := filepath.Base(path)
+	if dotIndex := strings.LastIndex(baseName, "."); dotIndex > 0 {
+		baseName = baseName[:dotIndex]
+	}
+	
+	reservedNames := []string{
+		"CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+	}
+	
+	upperBaseName := strings.ToUpper(baseName)
+	for _, reserved := range reservedNames {
+		if upperBaseName == reserved {
+			return true // This is a Windows reserved name, treat as Windows-like
+		}
+	}
+	
+	return false
 }
