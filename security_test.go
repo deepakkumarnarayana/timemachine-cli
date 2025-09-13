@@ -18,7 +18,7 @@ func TestSecurityProperty_ValidateUserInputPath(t *testing.T) {
 	// Property: User input validation should use filepath.IsLocal() behavior
 	// For local Git CLI tool, only block actual platform-specific security threats
 	property := func(input string) bool {
-		security.ValidateUserInputPath(input)
+		_, _ = security.ValidateUserInputPath(input)
 		
 		// For local Git CLI tool, both success and failure are acceptable
 		// filepath.IsLocal() handles platform-appropriate security validation
@@ -275,11 +275,6 @@ func TestSecurity_SymlinkValidation(t *testing.T) {
 
 // Helper functions for security testing
 
-func isSecureRelativePath(path string) bool {
-	// For local Git CLI tool, use Go's filepath.IsLocal() as the security boundary
-	// This automatically handles platform-appropriate security validations
-	return true // If we got here, validation already passed filepath.IsLocal()
-}
 
 func isActualSecurityThreat(path string) bool {
 	// Check if a path represents an actual security threat after fuzzing
@@ -329,10 +324,6 @@ func fuzzRealPathTraversalString(base string) string {
 	return variation(base)
 }
 
-func fuzzPathTraversalString(base string) string {
-	// Keep old function for compatibility with other tests
-	return fuzzRealPathTraversalString(base)
-}
 
 func generateRandomHexString(minLen, maxLen int) string {
 	length := minLen + rand.Intn(maxLen-minLen+1)
@@ -444,7 +435,7 @@ func TestProperty_NoControlCharacters(t *testing.T) {
 	// Property: For local Git CLI tool, control characters in filenames are acceptable
 	// Unix filesystems allow control characters in filenames - they're just bytes
 	property := func(input string) bool {
-		security.ValidateUserInputPath(input)
+		_, _ = security.ValidateUserInputPath(input)
 		
 		// For local Git CLI tool, filepath.IsLocal() is the appropriate validation
 		// Control characters in filenames are valid on Unix systems

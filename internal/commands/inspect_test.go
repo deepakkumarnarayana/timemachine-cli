@@ -284,9 +284,7 @@ func TestValidateSystemGitDir(t *testing.T) {
 		})
 	}
 
-	// Add Windows-specific test cases that run on all platforms for consistent security validation
-	// Our validateWindowsSystemPath() function now checks Windows paths regardless of platform
-	// This ensures consistent security validation across all operating systems
+	// Add Windows-specific test cases
 	windowsTests := []struct {
 		name      string
 		path      string
@@ -312,26 +310,75 @@ func TestValidateSystemGitDir(t *testing.T) {
 			wantErr:   false,
 			want:      "\\\\server\\share\\.git",
 		},
-		{
-			name: "windows reserved device name (allowed on Unix)",
-			path: "NUL",
-			want: "NUL",
-		},
-		{
-			name: "windows reserved device name lowercase (allowed on Unix)",
-			path: "nul",
-			want: "nul",
-		},
-		{
-			name: "windows COM port (allowed on Unix)",
-			path: "com1",
-			want: "com1",
-		},
-		{
-			name: "windows LPT port (allowed on Unix)",
-			path: "lpt1",
-			want: "lpt1",
-		},
+	}
+	
+	// Add platform-conditional device name tests
+	if runtime.GOOS == "windows" {
+		// On Windows, reserved device names are blocked by filepath.IsLocal()
+		windowsDeviceTests := []struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			{
+				name:      "windows reserved device name (blocked on Windows)",
+				path:      "NUL",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows reserved device name lowercase (blocked on Windows)",
+				path:      "nul",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows COM port (blocked on Windows)",
+				path:      "com1",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "windows LPT port (blocked on Windows)",
+				path:      "lpt1",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+		}
+		windowsTests = append(windowsTests, windowsDeviceTests...)
+	} else {
+		// On Unix, Windows device names are just regular filenames
+		unixDeviceTests := []struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			{
+				name: "windows reserved device name (allowed on Unix)",
+				path: "NUL",
+				want: "NUL",
+			},
+			{
+				name: "windows reserved device name lowercase (allowed on Unix)",
+				path: "nul",
+				want: "nul",
+			},
+			{
+				name: "windows COM port (allowed on Unix)",
+				path: "com1",
+				want: "com1",
+			},
+			{
+				name: "windows LPT port (allowed on Unix)",
+				path: "lpt1",
+				want: "lpt1",
+			},
+		}
+		windowsTests = append(windowsTests, unixDeviceTests...)
 	}
 	testCases = append(testCases, windowsTests...)
 
