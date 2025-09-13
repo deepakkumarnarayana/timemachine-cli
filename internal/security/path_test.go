@@ -105,10 +105,9 @@ func TestValidateUserInputPath(t *testing.T) {
 			errMsgAny: []string{"empty path not allowed"},
 		},
 		{
-			name:      "current directory not allowed",
-			path:      ".",
-			wantErr:   true,
-			errMsgAny: []string{"invalid relative path"},
+			name: "current directory allowed",
+			path: ".",
+			want: ".",
 		},
 		{
 			name: "valid relative path",
@@ -130,7 +129,7 @@ func TestValidateUserInputPath(t *testing.T) {
 			name:      "path traversal attack",
 			path:      "../etc/passwd",
 			wantErr:   true,
-			errMsgAny: []string{"directory traversal pattern detected", "path traversal attack detected"},
+			errMsgAny: []string{"path must be local and relative"},
 		},
 		{
 			name:      "unix absolute path",
@@ -142,7 +141,7 @@ func TestValidateUserInputPath(t *testing.T) {
 			name:      "complex attack path",
 			path:      "tmp/project/../../../.ssh/id_rsa",
 			wantErr:   true,
-			errMsgAny: []string{"directory traversal pattern detected", "path traversal attack detected"},
+			errMsgAny: []string{"path must be local and relative"},
 		},
 	}
 

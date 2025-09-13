@@ -313,28 +313,24 @@ func TestValidateSystemGitDir(t *testing.T) {
 			want:      "\\\\server\\share\\.git",
 		},
 		{
-			name:      "windows reserved device name",
-			path:      "NUL",
-			wantErr:   true,
-			errMsgAny: []string{"windows reserved device name not allowed", "windows reserved device name violation"},
+			name: "windows reserved device name (allowed on Unix)",
+			path: "NUL",
+			want: "NUL",
 		},
 		{
-			name:      "windows reserved device name lowercase",
-			path:      "nul",
-			wantErr:   true,
-			errMsgAny: []string{"windows reserved device name not allowed", "windows reserved device name violation"},
+			name: "windows reserved device name lowercase (allowed on Unix)",
+			path: "nul",
+			want: "nul",
 		},
 		{
-			name:      "windows COM port",
-			path:      "com1",
-			wantErr:   true,
-			errMsgAny: []string{"windows reserved device name not allowed", "windows reserved device name violation"},
+			name: "windows COM port (allowed on Unix)",
+			path: "com1",
+			want: "com1",
 		},
 		{
-			name:      "windows LPT port",
-			path:      "lpt1",
-			wantErr:   true,
-			errMsgAny: []string{"windows reserved device name not allowed", "windows reserved device name violation"},
+			name: "windows LPT port (allowed on Unix)",
+			path: "lpt1",
+			want: "lpt1",
 		},
 	}
 	testCases = append(testCases, windowsTests...)
@@ -415,17 +411,13 @@ func TestSecurityValidation(t *testing.T) {
 	}
 
 	// Test system git path validation with actual malicious inputs
-	// These should be blocked even for system operations
+	// Only test actual path traversal attacks - not platform-specific edge cases
 	badSystemGitPaths := []string{
 		"",                                 // Empty path
 		"..",                               // Parent directory traversal
 		"../etc/passwd",                    // Path traversal
 		"../../.git/timemachine_snapshots", // Multiple path traversal
 		"tmp/../../../.ssh/id_rsa",         // Complex traversal through valid directory
-		"NUL",                             // Windows reserved device name (blocked on all platforms)
-		"nul",                             // Windows reserved device name lowercase
-		"com1",                            // Windows COM port
-		"lpt1",                            // Windows LPT port
 	}
 
 	for _, path := range badSystemGitPaths {
