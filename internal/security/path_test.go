@@ -1,6 +1,7 @@
 package security
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 // TestValidateSystemPath tests the system path validation function that handles both absolute and relative paths
 func TestValidateSystemPath(t *testing.T) {
+	// Platform-appropriate base test cases
 	testCases := []struct {
 		name      string
 		path      string
@@ -29,17 +31,12 @@ func TestValidateSystemPath(t *testing.T) {
 		{
 			name: "valid relative path",
 			path: ".git/timemachine_snapshots",
-			want: ".git/timemachine_snapshots",
-		},
-		{
-			name: "valid absolute path",
-			path: "/tmp/project/.git/timemachine_snapshots",
-			want: "/tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash(".git/timemachine_snapshots"),
 		},
 		{
 			name: "path with redundant separators",
 			path: "tmp//project//.git//timemachine_snapshots",
-			want: "tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash("tmp/project/.git/timemachine_snapshots"),
 		},
 		{
 			name:      "relative path traversal attack",
@@ -47,12 +44,54 @@ func TestValidateSystemPath(t *testing.T) {
 			wantErr:   true,
 			errMsgAny: []string{"path must be local and relative"},
 		},
-		{
-			name:      "absolute path traversal attack",
-			path:      "/tmp/project/../../../etc/passwd",
-			wantErr:   true,
-			errMsgAny: []string{"path traversal not allowed in absolute path"},
-		},
+	}
+
+	// Platform-conditional absolute path tests
+	if runtime.GOOS == "windows" {
+		// On Windows, Unix absolute paths are rejected by filepath.IsLocal()
+		windowsAbsTests := []struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			{
+				name:      "unix absolute path (rejected on Windows)",
+				path:      "/tmp/project/.git/timemachine_snapshots",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+			{
+				name:      "unix absolute path traversal (rejected on Windows)",
+				path:      "/tmp/project/../../../etc/passwd",
+				wantErr:   true,
+				errMsgAny: []string{"path must be local and relative"},
+			},
+		}
+		testCases = append(testCases, windowsAbsTests...)
+	} else {
+		// On Unix, absolute paths are allowed for system operations
+		unixAbsTests := []struct {
+			name      string
+			path      string
+			want      string
+			wantErr   bool
+			errMsgAny []string
+		}{
+			{
+				name: "valid absolute path",
+				path: "/tmp/project/.git/timemachine_snapshots",
+				want: "/tmp/project/.git/timemachine_snapshots",
+			},
+			{
+				name:      "absolute path traversal attack",
+				path:      "/tmp/project/../../../etc/passwd",
+				wantErr:   true,
+				errMsgAny: []string{"path traversal not allowed in absolute path"},
+			},
+		}
+		testCases = append(testCases, unixAbsTests...)
 	}
 
 	for _, tc := range testCases {
@@ -112,12 +151,12 @@ func TestValidateUserInputPath(t *testing.T) {
 		{
 			name: "valid relative path",
 			path: ".git/timemachine_snapshots",
-			want: ".git/timemachine_snapshots",
+			want: filepath.FromSlash(".git/timemachine_snapshots"),
 		},
 		{
 			name: "path with redundant separators",
 			path: "tmp//project//.git//timemachine_snapshots",
-			want: "tmp/project/.git/timemachine_snapshots",
+			want: filepath.FromSlash("tmp/project/.git/timemachine_snapshots"),
 		},
 		{
 			name:      "parent directory traversal",
