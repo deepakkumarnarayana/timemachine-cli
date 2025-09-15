@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,11 @@ func NewIntegrationTestSuite(t *testing.T) *IntegrationTestSuite {
 	}
 
 	// Build timemachine binary for testing
-	binaryPath := filepath.Join(tempDir, "timemachine")
+	binaryName := "timemachine"
+	if runtime.GOOS == "windows" {
+		binaryName = "timemachine.exe"
+	}
+	binaryPath := filepath.Join(tempDir, binaryName)
 	if err := buildTimemachineBinary(binaryPath); err != nil {
 		_ = os.RemoveAll(tempDir) // Ignore error - cleanup is best effort
 		t.Fatalf("Failed to build binary: %v", err)
