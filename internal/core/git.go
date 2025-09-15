@@ -563,20 +563,25 @@ func (g *GitManager) CreateSnapshot(message string) error {
 	return nil
 }
 
-// Snapshot represents a Git commit snapshot
+// Snapshot represents a Git commit snapshot with enhanced statistics
 type Snapshot struct {
-	Hash    string // Full commit hash
-	Message string // Commit message
-	Time    string // Relative time (e.g., "2 minutes ago")
+	Hash         string // Full commit hash
+	Message      string // Commit message
+	Time         string // Relative time (e.g., "2 minutes ago")
+	FilesChanged int    // Number of files modified in this snapshot
+	LinesAdded   int    // Lines of code added
+	LinesRemoved int    // Lines of code removed
+	Author       string // Commit author
+	AbsoluteTime string // Absolute timestamp for sorting
 }
 
-// ListSnapshots returns a list of snapshots, optionally filtered by file
+// ListSnapshots returns a list of snapshots with enhanced statistics, optionally filtered by file
 func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, error) {
-	// Build git log command
-	args := []string{"log", "--oneline", "--date=relative"}
+	// Build git log command with enhanced format
+	args := []string{"log", "--date=relative"}
 
-	// Add pretty format to get hash, message, and relative time
-	args = append(args, "--pretty=format:%H|%s|%ar")
+	// Add pretty format to get hash, message, relative time, author, and absolute time
+	args = append(args, "--pretty=format:%H|%s|%ar|%an|%ai")
 
 	// Add limit if specified
 	if limit > 0 {
@@ -606,19 +611,80 @@ func (g *GitManager) ListSnapshots(limit int, filePath string) ([]Snapshot, erro
 			continue
 		}
 
-		parts := strings.SplitN(line, "|", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(line, "|", 5)
+		if len(parts) != 5 {
 			continue
 		}
 
-		snapshots = append(snapshots, Snapshot{
-			Hash:    parts[0],
-			Message: parts[1],
-			Time:    parts[2],
-		})
+		// Create basic snapshot
+		snapshot := Snapshot{
+			Hash:         parts[0],
+			Message:      parts[1],
+			Time:         parts[2],
+			Author:       parts[3],
+			AbsoluteTime: parts[4],
+		}
+
+		// Calculate file change statistics for this snapshot
+		stats, err := g.getSnapshotStats(snapshot.Hash)
+		if err == nil {
+			snapshot.FilesChanged = stats.FilesChanged
+			snapshot.LinesAdded = stats.LinesAdded
+			snapshot.LinesRemoved = stats.LinesRemoved
+		}
+
+		snapshots = append(snapshots, snapshot)
 	}
 
 	return snapshots, nil
+}
+
+// SnapshotStats holds statistics for a single snapshot
+type SnapshotStats struct {
+	FilesChanged int
+	LinesAdded   int
+	LinesRemoved int
+}
+
+// getSnapshotStats calculates file change statistics for a snapshot
+func (g *GitManager) getSnapshotStats(hash string) (*SnapshotStats, error) {
+	// Use git show --numstat to get file change statistics
+	output, err := g.RunCommand("show", "--numstat", "--format=", hash)
+	if err != nil {
+		return &SnapshotStats{}, nil // Return zero stats on error, don't fail the listing
+	}
+
+	stats := &SnapshotStats{}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Parse numstat format: "added	removed	filename"
+		parts := strings.Fields(line)
+		if len(parts) >= 3 {
+			stats.FilesChanged++
+
+			// Parse added lines (skip binary files marked with "-")
+			if parts[0] != "-" {
+				if added, err := strconv.Atoi(parts[0]); err == nil {
+					stats.LinesAdded += added
+				}
+			}
+
+			// Parse removed lines (skip binary files marked with "-")
+			if parts[1] != "-" {
+				if removed, err := strconv.Atoi(parts[1]); err == nil {
+					stats.LinesRemoved += removed
+				}
+			}
+		}
+	}
+
+	return stats, nil
 }
 
 // ListSnapshotsByBranch returns snapshots filtered by branch name
