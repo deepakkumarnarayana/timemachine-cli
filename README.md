@@ -69,13 +69,45 @@ Press Ctrl+C to stop watching.
 
 *That's it! TimeMachine is now silently protecting you in the background.*
 
-### Step 3: Work Fearlessly 
+### Step 3: Work Fearlessly
 ```bash
 # Now just code normally...
 # Ask AI to refactor something...
 # Make experimental changes...
 # Everything is automatically saved!
 ```
+
+### 🎯 Pro Tip: Manual Snapshots Before Big Changes
+**For maximum safety, create a snapshot before asking AI to make major changes:**
+
+```bash
+# Before asking AI to refactor/modify code
+timemachine snapshot "Before AI refactors authentication system"
+
+# Then ask AI to make changes...
+# If something breaks, you have a perfect restore point!
+```
+
+**Why this is powerful:**
+- 🛡️ **Guaranteed safe point** - You control exactly when the snapshot is taken
+- 📝 **Clear context** - Each snapshot has a meaningful description
+- ⚡ **Instant rollback** - Go back to the exact moment before changes began
+- 🎯 **Perfect for AI workflows** - Ideal before asking AI assistants to modify code
+
+### 🤖 For AI Assistants: Code Changes Protocol
+**Copy this instruction to ensure AI assistants always create safety snapshots:**
+
+```
+Before making any code changes, always run:
+timemachine snapshot "Brief description of changes being made"
+
+This creates a safe restore point. Examples:
+- timemachine snapshot "Before refactoring authentication system"
+- timemachine snapshot "Before adding new API endpoints"
+- timemachine snapshot "Before updating dependencies"
+```
+
+*Add this instruction to your AI assistant prompts to ensure they always create safety snapshots!*
 
 ### Step 4: When Something Breaks (The Magic Moment)
 ```bash
@@ -212,6 +244,7 @@ your-awesome-project/
 ```bash
 timemachine init     # Set up protection for this project
 timemachine start    # Start watching (run in background)
+timemachine snapshot "description"  # Create manual snapshot before changes
 timemachine list     # See what snapshots you have
 timemachine restore abc1234  # Go back to snapshot abc1234
 ```
@@ -234,13 +267,16 @@ timemachine clean --older-than 3d  # Delete older than 3 days
 
 ### Scenario 1: "The Refactoring Disaster"
 ```bash
+# Smart developer creates safety snapshot first:
+$ timemachine snapshot "Before Claude refactors controller"
+
 You: "Claude, can you refactor this messy controller file?"
 Claude: *confidently breaks 47 files*
 
-📸 Before: "Working user dashboard" (32 files, 2 min ago)
-📸 After:  "AI refactored controller" (47 files, just now) ← BROKEN
+📸 Manual: "Before Claude refactors controller" (32 files, 2 min ago) ← SAFE POINT
+📸 Auto:   "AI refactored controller" (47 files, just now) ← BROKEN
 
-$ timemachine restore [before]  # Back to working in 2 seconds!
+$ timemachine restore [safe-point]  # Back to working in 2 seconds!
 ```
 
 ### Scenario 2: "The Dependency Nightmare" 
@@ -314,6 +350,38 @@ config/secrets.env
 ```
 
 *Pro tip: TimeMachine already ignores common stuff automatically, so you might not need this at all!*
+
+## 🤖 AI Assistant Integration
+
+### Prompt Template for Maximum Safety
+**Add this to your AI assistant instructions for foolproof protection:**
+
+```
+## TimeMachine Safety Protocol
+
+Before making code changes, always run:
+timemachine snapshot "Brief description of changes being made"
+
+Examples:
+timemachine snapshot "Before refactoring user authentication"
+timemachine snapshot "Before adding validation to API endpoints"
+timemachine snapshot "Before updating React components"
+timemachine snapshot "Before modifying database schema"
+
+This creates a safety checkpoint. If changes break something,
+the user can instantly restore with: timemachine restore <hash>
+```
+
+### Integration Examples
+
+**For Claude Code users:**
+Add this to your project's `CLAUDE.md` file to ensure Claude always creates snapshots.
+
+**For ChatGPT/Custom Instructions:**
+Include this in your custom instructions for coding sessions.
+
+**For Team Projects:**
+Share this protocol with your team to establish consistent AI safety practices.
 
 ## 🆘 "Help! Something's Not Working!"
 

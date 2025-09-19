@@ -77,8 +77,8 @@ func runClean(auto, quiet bool, keep int, olderThan string, destroy bool) error 
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
-	// Get current snapshots before cleaning
-	snapshots, err := gitManager.ListSnapshots(0, "")
+	// Get current snapshots before cleaning (fast metadata only, no statistics needed)
+	snapshots, err := gitManager.ListSnapshotsMetadata(0, "")
 	if err != nil {
 		if !quiet {
 			return fmt.Errorf("failed to list snapshots: %w", err)

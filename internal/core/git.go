@@ -959,3 +959,99 @@ func (g *GitManager) createInitialCommit() error {
 
 	return nil
 }
+
+// GetLatestSnapshotHash returns just the hash of the most recent snapshot
+// This is the fastest possible method for checking if new snapshots exist
+func (g *GitManager) GetLatestSnapshotHash() (string, error) {
+	output, err := g.RunCommand("log", "-1", "--format=%H")
+	if err != nil {
+		// If no commits exist yet, return empty string (not error)
+		if strings.Contains(err.Error(), "does not have any commits yet") {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get latest snapshot hash: %w", err)
+	}
+
+	hash := strings.TrimSpace(output)
+	if hash == "" {
+		return "", nil
+	}
+
+	// Validate the returned hash for security
+	if err := validateGitHash(hash); err != nil {
+		return "", fmt.Errorf("invalid hash returned from git: %w", err)
+	}
+
+	return hash, nil
+}
+
+// GetSingleSnapshot returns a single snapshot with metadata only (no statistics)
+// This is optimized for single snapshot lookups (e.g., in restore command)
+func (g *GitManager) GetSingleSnapshot(hash string) (*Snapshot, error) {
+	// Validate commit hash for security
+	if err := validateGitHash(hash); err != nil {
+		return nil, fmt.Errorf("invalid commit hash: %w", err)
+	}
+
+	// Get snapshot metadata using git log
+	output, err := g.RunCommand("log", "-1", "--pretty=format:%H|%s|%ar|%an|%ai", hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get snapshot metadata: %w", err)
+	}
+
+	line := strings.TrimSpace(output)
+	if line == "" {
+		return nil, fmt.Errorf("snapshot not found: %s", hash)
+	}
+
+	parts := strings.SplitN(line, "|", 5)
+	if len(parts) != 5 {
+		return nil, fmt.Errorf("invalid git log output format")
+	}
+
+	snapshot := &Snapshot{
+		Hash:         parts[0],
+		Message:      parts[1],
+		Time:         parts[2],
+		Author:       parts[3],
+		AbsoluteTime: parts[4],
+		FilesChanged: 0, // Not calculated for fast lookup
+		LinesAdded:   0, // Not calculated for fast lookup
+		LinesRemoved: 0, // Not calculated for fast lookup
+	}
+
+	return snapshot, nil
+}
+
+// ListSnapshotsWithStats is a renamed version of the original ListSnapshots
+// This method includes full file change statistics and is slower
+func (g *GitManager) ListSnapshotsWithStats(limit int, filePath string) ([]Snapshot, error) {
+	// This is the original ListSnapshots implementation
+	return g.ListSnapshots(limit, filePath)
+}
+
+// GetSnapshotCount returns the total number of snapshots in the repository
+// This is much faster than fetching all snapshots just to count them
+func (g *GitManager) GetSnapshotCount() (int, error) {
+	output, err := g.RunCommand("rev-list", "--count", "HEAD")
+	if err != nil {
+		// If no commits exist yet, return 0 (not error)
+		if strings.Contains(err.Error(), "does not have any commits yet") ||
+			strings.Contains(err.Error(), "bad revision") {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to count snapshots: %w", err)
+	}
+
+	countStr := strings.TrimSpace(output)
+	if countStr == "" {
+		return 0, nil
+	}
+
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid count output: %s", countStr)
+	}
+
+	return count, nil
+}

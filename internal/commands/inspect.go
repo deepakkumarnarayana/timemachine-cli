@@ -166,17 +166,17 @@ func runInspect(args []string, showDiff, showStats bool, fileFilter string, verb
 			return fmt.Errorf("invalid snapshot hash: %w", err)
 		}
 	} else {
-		// Get latest snapshot
-		snapshots, err := gitManager.ListSnapshots(1, "")
+		// Get latest snapshot hash (fast)
+		hash, err := gitManager.GetLatestSnapshotHash()
 		if err != nil {
-			return fmt.Errorf("failed to get snapshots: %w", err)
+			return fmt.Errorf("failed to get latest snapshot: %w", err)
 		}
-		if len(snapshots) == 0 {
+		if hash == "" {
 			color.Yellow("📝 No snapshots found")
 			return nil
 		}
-		targetHash = snapshots[0].Hash
-		// Internal hashes from ListSnapshots are trusted, but validate anyway for defense in depth
+		targetHash = hash
+		// Internal hashes from GetLatestSnapshotHash are trusted, but validate anyway for defense in depth
 		if err := validateGitHash(targetHash); err != nil {
 			return fmt.Errorf("internal hash validation failed: %w", err)
 		}
