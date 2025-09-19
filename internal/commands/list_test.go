@@ -39,7 +39,7 @@ func TestRunListEnhanced(t *testing.T) {
 	t.Run("Enhanced Mode", func(t *testing.T) {
 		// Capture stdout for testing
 		output := captureOutput(t, func() {
-			err := runList("", 5, true, false)
+			err := runList("", 5, true, false, false)
 			if err != nil {
 				t.Errorf("runList failed: %v", err)
 			}
@@ -74,7 +74,7 @@ func TestRunListEnhanced(t *testing.T) {
 	// Test compact mode (legacy)
 	t.Run("Compact Mode", func(t *testing.T) {
 		output := captureOutput(t, func() {
-			err := runList("", 5, false, true)
+			err := runList("", 5, false, true, false)
 			if err != nil {
 				t.Errorf("runList failed: %v", err)
 			}
@@ -125,7 +125,7 @@ func TestRunListWithFileFilter(t *testing.T) {
 
 	// Test file filtering
 	output := captureOutput(t, func() {
-		err := runList("test1.txt", 10, true, false)
+		err := runList("test1.txt", 10, true, false, false)
 		if err != nil {
 			t.Errorf("runList with filter failed: %v", err)
 		}
@@ -172,7 +172,7 @@ func TestRunListNoSnapshots(t *testing.T) {
 
 	// Test with no snapshots
 	output := captureOutput(t, func() {
-		err := runList("", 10, true, false)
+		err := runList("", 10, true, false, false)
 		if err != nil {
 			t.Errorf("runList with no snapshots failed: %v", err)
 		}
@@ -213,7 +213,7 @@ func TestRunListLimit(t *testing.T) {
 
 	// Test with limit of 2
 	output := captureOutput(t, func() {
-		err := runList("", 2, true, false)
+		err := runList("", 2, true, false, false)
 		if err != nil {
 			t.Errorf("runList with limit failed: %v", err)
 		}

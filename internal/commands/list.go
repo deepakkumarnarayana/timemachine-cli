@@ -16,30 +16,39 @@ func ListCmd() *cobra.Command {
 		limit      int
 		enhanced   bool
 		compact    bool
+		stats      bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List recent snapshots with enhanced formatting",
-		Long: `List recent snapshots from the Time Machine shadow repository with rich statistics.
+		Short: "List recent snapshots with fast display",
+		Long: `List recent snapshots from the Time Machine shadow repository.
 
-The enhanced format shows file counts, line changes, and color-coded change magnitude.
-You can filter snapshots by file and limit the number of results.`,
+By default, shows fast metadata display for instant response. Use --stats to include
+file change statistics (slower but more detailed). You can filter snapshots by file
+and limit the number of results.
+
+Examples:
+  timemachine list                    # Fast metadata display
+  timemachine list --stats           # Include file change statistics
+  timemachine list --compact         # Legacy compact format
+  timemachine list -f path/to/file   # Filter by file path`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(filePath, limit, enhanced, compact)
+			return runList(filePath, limit, enhanced, compact, stats)
 		},
 	}
 
 	// Add flags
 	cmd.Flags().StringVarP(&filePath, "file", "f", "", "Filter snapshots by file path")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 20, "Limit number of snapshots to show")
-	cmd.Flags().BoolVar(&enhanced, "enhanced", true, "Use enhanced table format with statistics")
+	cmd.Flags().BoolVar(&enhanced, "enhanced", true, "Use enhanced table format")
 	cmd.Flags().BoolVar(&compact, "compact", false, "Use compact format (legacy)")
+	cmd.Flags().BoolVar(&stats, "stats", false, "Include file change statistics (slower)")
 
 	return cmd
 }
 
-func runList(filePath string, limit int, enhanced bool, compact bool) error {
+func runList(filePath string, limit int, enhanced bool, compact bool, stats bool) error {
 	// Handle flag conflicts
 	if compact {
 		enhanced = false
@@ -60,10 +69,20 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 	// Create Git manager
 	gitManager := core.NewGitManager(state)
 
-	// Get snapshots
-	snapshots, err := gitManager.ListSnapshots(limit, filePath)
-	if err != nil {
-		return fmt.Errorf("failed to list snapshots: %w", err)
+	// Get snapshots - use fast metadata by default, full stats only when requested
+	var snapshots []core.Snapshot
+	if stats {
+		// Use slower method with statistics when explicitly requested
+		snapshots, err = gitManager.ListSnapshots(limit, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to list snapshots with statistics: %w", err)
+		}
+	} else {
+		// Use fast metadata-only method by default
+		snapshots, err = gitManager.ListSnapshotsMetadata(limit, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to list snapshots: %w", err)
+		}
 	}
 
 	// Handle empty results
@@ -83,11 +102,20 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 
 	// Choose display format based on flags
 	if enhanced && len(snapshots) > 0 {
-		// Enhanced table output with rich formatting
-		fmt.Printf("%-10s %-40s %-8s %-12s %-15s\n",
-			"Hash", "Message", "Files", "Changes", "Time")
-		fmt.Printf("%-10s %-40s %-8s %-12s %-15s\n",
-			"────────", "──────────────────────────────────────", "─────", "──────────", "─────────────")
+		// Enhanced table output with conditional statistics columns
+		if stats {
+			// Full enhanced format with statistics
+			fmt.Printf("%-10s %-40s %-8s %-12s %-15s\n",
+				"Hash", "Message", "Files", "Changes", "Time")
+			fmt.Printf("%-10s %-40s %-8s %-12s %-15s\n",
+				"────────", "──────────────────────────────────────", "─────", "──────────", "─────────────")
+		} else {
+			// Fast enhanced format without statistics
+			fmt.Printf("%-10s %-50s %-15s\n",
+				"Hash", "Message", "Time")
+			fmt.Printf("%-10s %-50s %-15s\n",
+				"────────", "──────────────────────────────────────────────────", "─────────────")
+		}
 
 		for _, snapshot := range snapshots {
 			// Truncate hash to 8 characters for display
@@ -96,30 +124,40 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 				shortHash = shortHash[:8]
 			}
 
-			// Format changes as +added/-removed
-			changes := fmt.Sprintf("+%d/-%d", snapshot.LinesAdded, snapshot.LinesRemoved)
-			if snapshot.LinesAdded == 0 && snapshot.LinesRemoved == 0 {
-				changes = "no changes"
-			}
+			if stats {
+				// Full format with statistics
+				// Format changes as +added/-removed
+				changes := fmt.Sprintf("+%d/-%d", snapshot.LinesAdded, snapshot.LinesRemoved)
+				if snapshot.LinesAdded == 0 && snapshot.LinesRemoved == 0 {
+					changes = "no changes"
+				}
 
-			// Colorize based on change magnitude
-			var coloredChanges string
-			totalChanges := snapshot.LinesAdded + snapshot.LinesRemoved
-			if totalChanges > 500 {
-				coloredChanges = color.RedString(changes) // Large changes
-			} else if totalChanges > 100 {
-				coloredChanges = color.YellowString(changes) // Medium changes
+				// Colorize based on change magnitude
+				var coloredChanges string
+				totalChanges := snapshot.LinesAdded + snapshot.LinesRemoved
+				if totalChanges > 500 {
+					coloredChanges = color.RedString(changes) // Large changes
+				} else if totalChanges > 100 {
+					coloredChanges = color.YellowString(changes) // Medium changes
+				} else {
+					coloredChanges = color.GreenString(changes) // Small changes
+				}
+
+				fmt.Printf("%-10s %-40s %-8d %-12s %-15s\n",
+					color.CyanString(shortHash),
+					utils.TruncateString(snapshot.Message, 40),
+					snapshot.FilesChanged,
+					coloredChanges,
+					snapshot.Time,
+				)
 			} else {
-				coloredChanges = color.GreenString(changes) // Small changes
+				// Fast format without statistics
+				fmt.Printf("%-10s %-50s %-15s\n",
+					color.CyanString(shortHash),
+					utils.TruncateString(snapshot.Message, 50),
+					snapshot.Time,
+				)
 			}
-
-			fmt.Printf("%-10s %-40s %-8d %-12s %-15s\n",
-				color.CyanString(shortHash),
-				utils.TruncateString(snapshot.Message, 40),
-				snapshot.FilesChanged,
-				coloredChanges,
-				snapshot.Time,
-			)
 		}
 	} else if len(snapshots) > 0 {
 		// Compact/legacy format for backwards compatibility
@@ -139,11 +177,11 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 		}
 	}
 
-	// Display summary with statistics
+	// Display summary
 	fmt.Println()
 	if len(snapshots) > 0 {
-		if enhanced {
-			// Calculate summary statistics for enhanced mode
+		if enhanced && stats {
+			// Calculate summary statistics for enhanced mode with stats
 			totalFiles := 0
 			totalAdded := 0
 			totalRemoved := 0
@@ -161,7 +199,7 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 					len(snapshots), totalFiles, totalAdded, totalRemoved)
 			}
 		} else {
-			// Simple summary for compact mode
+			// Simple summary for fast mode or compact mode
 			if filePath != "" {
 				fmt.Printf("Total: %d snapshots for '%s'\n", len(snapshots), filePath)
 			} else {
@@ -176,6 +214,9 @@ func runList(filePath string, limit int, enhanced bool, compact bool) error {
 		fmt.Println("   • Use 'timemachine show <hash>' to see details")
 		fmt.Println("   • Use 'timemachine restore <hash>' to restore a snapshot")
 		fmt.Println("   • Use 'timemachine restore <hash> --interactive' for selective restore")
+		if !stats {
+			fmt.Println("   • Use '--stats' to include file change statistics (slower)")
+		}
 		fmt.Println("   • Use '--compact' for legacy format")
 	} else {
 		fmt.Println("Use 'timemachine show <hash>' to see details")
