@@ -168,11 +168,6 @@ func (w *Watcher) createSnapshot() {
 		return
 	}
 
-	// Get latest snapshot for display
-	snapshots, err := w.gitManager.ListSnapshots(1, "")
-	if err == nil && len(snapshots) > 0 {
-		color.Green("✅ Done! (Latest: %s)", snapshots[0].Time)
-	} else {
-		color.Green("✅ Done!")
-	}
+	// Show completion (no need to fetch snapshot data for simple confirmation)
+	color.Green("✅ Done!")
 }

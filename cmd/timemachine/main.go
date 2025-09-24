@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const Version = "1.1.0"
+const Version = "1.1.12"
 
 var rootCmd = &cobra.Command{
 	Use:     "timemachine",
@@ -44,11 +44,6 @@ your codebase and creates snapshots without affecting your main Git workflow.
   3. Snapshot Analysis:
      timemachine list → timemachine inspect <hash> --diff --verbose`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if version, _ := cmd.Flags().GetBool("version"); version {
-			fmt.Printf("Time Machine CLI v%s\n", Version)
-			return
-		}
-
 		// Show enhanced help with current status
 		state, err := core.NewAppState()
 		if err != nil {
@@ -73,7 +68,7 @@ your codebase and creates snapshots without affecting your main Git workflow.
 func init() {
 	// Add version flag
 	rootCmd.Flags().BoolP("version", "v", false, "Show version information")
-
+	rootCmd.SetVersionTemplate(fmt.Sprintf("Time Machine version %s\n", Version))
 	// Add commands in logical order
 	rootCmd.AddCommand(commands.InitCmd())     // Setup
 	rootCmd.AddCommand(commands.ConfigCmd())   // Configuration
@@ -88,6 +83,8 @@ func init() {
 }
 
 func main() {
+	fmt.Println("⏰ Time Machine - Automatic Git snapshots for AI-assisted development")
+	fmt.Println("---------------------------------------------------------------")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

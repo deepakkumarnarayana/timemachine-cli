@@ -118,6 +118,28 @@ All CLI commands are in `internal/commands/`:
 5. **Test manually**: `make build && ./timemachine init && ./timemachine start`
 6. **Verify shadow repo isolation**: Check that main Git workflow is unaffected
 
+## Development Guidelines
+
+### Code Changes Protocol
+**CRITICAL**: Always take a timemachine snapshot before making any code changes:
+```bash
+timemachine snapshot "Brief description of changes being made"
+```
+
+This ensures there's always a safe restore point if the changes break something. The snapshot captures the current working state before any modifications begin.
+
+**Example workflow:**
+```bash
+# Before making changes
+timemachine snapshot "Before optimizing list command performance"
+
+# Make your changes...
+# Edit files, add features, etc.
+
+# If something breaks, instantly restore
+timemachine restore <hash>  # Go back to working state
+```
+
 ## Shadow Repository Verification
 
 To verify shadow repo is working correctly:

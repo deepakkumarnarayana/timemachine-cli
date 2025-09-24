@@ -73,23 +73,24 @@ func runStatus(verbose bool) error {
 	// Create Git manager for statistics
 	gitManager := core.NewGitManager(state)
 
-	// Get snapshot statistics
-	snapshots, err := gitManager.ListSnapshots(0, "")
+	// Get total snapshot count (fast)
+	totalCount, err := gitManager.GetSnapshotCount()
 	if err != nil {
-		color.Red("❌ Error getting snapshots: %v", err)
+		color.Red("❌ Error getting snapshot count: %v", err)
+		return nil
+	}
+
+	// Get recent snapshots for activity display (fast metadata only)
+	recentSnapshots, err := gitManager.ListSnapshotsMetadata(5, "")
+	if err != nil {
+		color.Red("❌ Error getting recent snapshots: %v", err)
 		return nil
 	}
 
 	fmt.Println()
-	fmt.Printf("📸 Snapshots: %d total\n", len(snapshots))
+	fmt.Printf("📸 Snapshots: %d total\n", totalCount)
 
-	if len(snapshots) > 0 {
-		// Show recent activity
-		recentSnapshots := snapshots
-		if len(snapshots) > 5 {
-			recentSnapshots = snapshots[:5]
-		}
-
+	if len(recentSnapshots) > 0 {
 		fmt.Println("   Recent activity:")
 		for _, snapshot := range recentSnapshots {
 			fmt.Printf("   • %s  %s  %s\n",
@@ -98,8 +99,8 @@ func runStatus(verbose bool) error {
 				snapshot.Time)
 		}
 
-		if verbose && len(snapshots) > 5 {
-			fmt.Printf("   ... and %d more snapshots\n", len(snapshots)-5)
+		if verbose && totalCount > 5 {
+			fmt.Printf("   ... and %d more snapshots\n", totalCount-5)
 		}
 	} else {
 		fmt.Println("   No snapshots yet")

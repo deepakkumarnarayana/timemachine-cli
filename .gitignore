@@ -41,3 +41,6 @@ dk/test.txt
 *_coverage.out
 *.json
 timemachine-*
+docs/developmentplans
+docs/development/
+docs/plan.md

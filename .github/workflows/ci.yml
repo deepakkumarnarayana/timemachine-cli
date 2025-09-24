@@ -50,11 +50,23 @@ jobs:
         go mod tidy
         git diff --exit-code go.mod go.sum
 
-    - name: Run core tests
+    - name: Run unit tests - Core
       run: go test -v -race -timeout=10m ./internal/core/...
 
-    - name: Run command tests
+    - name: Run unit tests - Commands  
       run: go test -v -race -timeout=10m ./internal/commands/...
+
+    - name: Run unit tests - Security
+      run: go test -v -race -timeout=10m ./internal/security/...
+
+    - name: Run integration tests
+      run: go test -v -race -timeout=15m -run TestInit -run TestList -run TestShow -run TestInspect -run TestRestore -run TestClean -run TestErrorHandling
+
+    - name: Run behavior-driven tests
+      run: go test -v -race -timeout=15m -run TestDeveloperWorkflow
+
+    - name: Run security tests
+      run: go test -v -race -timeout=10m -run TestSecurity -run TestProperty -run TestFuzz
 
     - name: Run config tests (if exists)
       shell: bash
@@ -204,10 +216,17 @@ jobs:
     - name: Run go vet
       run: go vet ./...
 
-    - name: Run security tests
+    - name: Run comprehensive security tests
       run: |
-        echo "🔒 Running security-focused tests..."
-        go test -v -race -timeout=15m -run="TestSecurity" ./...
+        echo "🔒 Running comprehensive security validation tests..."
+        echo "🛡️ Path traversal protection tests..."
+        go test -v -race -timeout=10m -run="TestSecurity" ./...
+        echo "🔍 Property-based security tests..."
+        go test -v -race -timeout=10m -run="TestProperty" ./...
+        echo "🎯 Fuzzing-based security tests..."  
+        go test -v -race -timeout=15m -run="TestFuzz" ./...
+        echo "⚡ Security regression tests..."
+        go test -v -race -timeout=10m -run="TestSecurityValidation" ./...
 
     - name: Install gosec
       run: go install github.com/securego/gosec/v2/cmd/gosec@latest

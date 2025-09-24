@@ -67,23 +67,10 @@ func runRestore(hash string, files []string, force bool) error {
 		return nil
 	}
 
-	// Get snapshot details for confirmation
-	snapshots, err := gitManager.ListSnapshots(0, "")
+	// Get snapshot details for confirmation (fast single lookup)
+	targetSnapshot, err := gitManager.GetSingleSnapshot(hash)
 	if err != nil {
 		return fmt.Errorf("failed to get snapshot info: %w", err)
-	}
-
-	var targetSnapshot *core.Snapshot
-	for _, snapshot := range snapshots {
-		if strings.HasPrefix(snapshot.Hash, hash) || snapshot.Hash == hash {
-			targetSnapshot = &snapshot
-			break
-		}
-	}
-
-	if targetSnapshot == nil {
-		color.Red("❌ Could not find snapshot details!")
-		return nil
 	}
 
 	// Show what will be restored

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -38,8 +39,11 @@ func TestIntegrationConfigManagerLifecycle(t *testing.T) {
 			t.Errorf("Config file not created: %v", err)
 		}
 
-		if info.Mode().Perm() != 0600 {
-			t.Errorf("Config file has wrong permissions: %o", info.Mode().Perm())
+		// Skip file permission check on Windows (different permission model)
+		if runtime.GOOS != "windows" {
+			if info.Mode().Perm() != 0600 {
+				t.Errorf("Config file has wrong permissions: %o", info.Mode().Perm())
+			}
 		}
 
 		// Try creating again (should fail without force)
@@ -275,8 +279,20 @@ func TestIntegrationConfigValidatorEdgeCases(t *testing.T) {
 			{"   ", false, "whitespace only"},
 			{"relative/path.log", true, "valid relative path"},
 			{"../../../etc/passwd", false, "path traversal"},
-			{"/etc/passwd", false, "unsafe absolute path"},
-			{"/root/.ssh/id_rsa", false, "unsafe root path"},
+		}
+
+		// Add OS-specific unsafe path tests
+		if runtime.GOOS != "windows" {
+			testCases = append(testCases,
+				struct{path string; expected bool; desc string}{"/etc/passwd", false, "unsafe absolute path"},
+				struct{path string; expected bool; desc string}{"/root/.ssh/id_rsa", false, "unsafe root path"},
+			)
+		} else {
+			// Windows-specific unsafe paths
+			testCases = append(testCases,
+				struct{path string; expected bool; desc string}{"C:\\Windows\\System32\\config\\SAM", false, "unsafe Windows system path"},
+				struct{path string; expected bool; desc string}{"C:\\Users\\Administrator\\.ssh\\id_rsa", false, "unsafe Windows user path"},
+			)
 		}
 
 		for _, tc := range testCases {
@@ -469,7 +485,7 @@ func TestIntegrationConfigErrorRecovery(t *testing.T) {
 
 	t.Run("Permission Denied Recovery", func(t *testing.T) {
 		// Skip this test on Windows as file permissions work differently
-		if os.Getenv("RUNNER_OS") == "Windows" {
+		if runtime.GOOS == "windows" {
 			t.Skip("Skipping permission test on Windows")
 		}
 

@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// SanitizeGitPath validates and sanitizes git directory paths using Go's built-in security functions
-// This function supports both absolute paths (for internal system use) and relative paths (for user inputs)
-func SanitizeGitPath(path string) (string, error) {
+// ValidateSystemPath validates system directory paths (shadow repo, project root, git dirs)
+// This function allows absolute paths which are required for system operations
+func ValidateSystemPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
@@ -16,18 +16,16 @@ func SanitizeGitPath(path string) (string, error) {
 	// Clean the path using OS-appropriate rules
 	cleaned := filepath.Clean(path)
 
-	// For absolute paths (system-internal paths like ShadowRepoDir), check basic security constraints
+	// For absolute paths (system-internal paths like ShadowRepoDir), basic validation
 	if filepath.IsAbs(cleaned) {
-		// Prevent path traversal in absolute paths by checking the original path before cleaning
-		// This catches cases where "../.." resolves to an unexpected absolute path
+		// Just prevent obvious traversal attempts in absolute paths
 		if strings.Contains(path, "..") {
 			return "", fmt.Errorf("path traversal not allowed in absolute path")
 		}
 		return cleaned, nil
 	}
 
-	// For relative paths (user inputs), use Go's built-in security validation (Go 1.20+)
-	// This handles cross-platform path traversal prevention automatically
+	// For relative paths, use Go's built-in security validation
 	if !filepath.IsLocal(cleaned) {
 		return "", fmt.Errorf("path must be local and relative")
 	}
@@ -35,19 +33,17 @@ func SanitizeGitPath(path string) (string, error) {
 	return cleaned, nil
 }
 
-// SanitizeUserInputPath validates and sanitizes paths from user inputs with strict relative-only validation
-// This function only allows relative paths for maximum security when handling user inputs
-func SanitizeUserInputPath(path string) (string, error) {
+// ValidateUserInputPath validates user file paths (simple validation for local CLI tool)
+// For a Git-based local tool, we just need basic traversal prevention
+func ValidateUserInputPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Clean the path using OS-appropriate rules
+	// Clean the path and use Go's built-in security validation
 	cleaned := filepath.Clean(path)
-
-	// For user inputs, we only allow relative paths for security
-	// Use Go's built-in security validation (Go 1.20+)
-	// This handles cross-platform path traversal prevention automatically
+	
+	// Go 1.20+ filepath.IsLocal handles all the complex cross-platform security cases
 	if !filepath.IsLocal(cleaned) {
 		return "", fmt.Errorf("path must be local and relative")
 	}
